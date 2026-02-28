@@ -2,9 +2,22 @@
 CREATE TABLE IF NOT EXISTS usuarios (
     id SERIAL PRIMARY KEY,
     nome VARCHAR(100) NOT NULL,
-    matricula VARCHAR(50) UNIQUE NOT NULL,
+    usuario VARCHAR(50) UNIQUE NOT NULL, -- O login (ex: 'admin')
+    matricula VARCHAR(50) UNIQUE,
+    perfil VARCHAR(20) DEFAULT 'conferente', -- 'conferente', 'admin'        
+    senha VARCHAR(255) NOT NULL,         -- A senha real
     ativo BOOLEAN DEFAULT TRUE
 );
+
+-- Inserir um usuário padrão para os testes (com usuário e senha)
+INSERT INTO usuarios (nome, usuario, matricula, senha, perfil)
+VALUES ('Toshiba', 'toshiba', '0001', '1251', 'admin') 
+ON CONFLICT DO NOTHING;
+
+-- Inserir um conferente padrão para testes
+INSERT INTO usuarios (nome, usuario, matricula, senha, perfil) 
+VALUES ('João Conferente', 'conferente', '0002', '1234', 'conferente') 
+ON CONFLICT DO NOTHING;
 
 -- Controle de Cargas (Cabeçalho)
 CREATE TABLE IF NOT EXISTS conferencias_cargas (
@@ -37,6 +50,3 @@ CREATE TABLE IF NOT EXISTS fotos (
     observacao TEXT,
     capturado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- Inserir um usuário padrão para os testes
-INSERT INTO usuarios (nome, matricula) VALUES ('Admin / Teste', '0001') ON CONFLICT DO NOTHING;

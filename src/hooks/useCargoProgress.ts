@@ -117,73 +117,93 @@ export function useCargoProgress() {
 
   const searchCargo = useCallback(async (cargoId: string, continueProgress = false): Promise<Cargo | null> => {
     try {
-      // 1. Faz a requisição real para a API
+      // 1. Busca os dados originais do ERP/Sistema externo
       const response = await fetch('http://192.168.255.3/api/consultar-ordem-carga', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // A API espera um número, então convertemos a string para Number
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ordemCarga: Number(cargoId) }) 
       });
 
-      if (!response.ok) {
-        throw new Error('Falha na comunicação com o servidor');
-      }
-
+      if (!response.ok) throw new Error('Falha na comunicação com o servidor');
       const data = await response.json();
-
       if (!data.sucesso || !data.dados || data.dados.length === 0) {
         throw new Error('Carga não encontrada ou sem produtos');
       }
 
-      // 2. Transforma os dados da API pro nosso formato
       const cargo = transformApiToCargo(data.dados);
 
-      // 3. Verifica se tem progresso salvo (código existente)
-      const savedProgress = loadProgress(cargoId);
-      
-      if (savedProgress && continueProgress) {
+      // 2. Busca o progresso no nosso NOVO backend local
+      let progressoDB = [];
+      try {
+        const dbResponse = await fetch(`/api-local/cargas/${cargoId}/progresso`);
+        if (dbResponse.ok) {
+          progressoDB = await dbResponse.json();
+        }
+      } catch (e) {
+        console.warn('Não foi possível buscar o progresso no banco local', e);
+      }
+
+      // 3. Mescla os dados da API com o progresso do Banco
+      if (progressoDB.length > 0 && continueProgress) {
         const productsWithProgress = cargo.products.map(product => {
-          const saved = savedProgress.products[product.code];
+          const savedProd = progressoDB.find((p: any) => p.produto_codigo === product.code);
           return {
             ...product,
-            checkedQuantity: saved?.checkedQuantity ?? null,
-            isChecked: saved?.isChecked ?? false,
+            checkedQuantity: savedProd ? savedProd.quantidade_conferida : null,
+            isChecked: !!savedProd,
           };
         });
 
         setCurrentCargo(cargo);
         setProducts(productsWithProgress);
-        setPhotos(savedProgress.photos || []);
-        setBags(savedProgress.bags || []);
-        setSelectedBrands([]);
-        const step = savedProgress.currentStep;
-        setCurrentStep(step === 'completed' ? 'brand-selection' : 
-                       step === 'verification' ? 'brand-selection' : step);
+        setCurrentStep('brand-selection');
       } else {
+        // Se não for continuar ou não tiver progresso, inicia zerado
         const productsWithProgress = cargo.products.map(product => ({
           ...product,
           checkedQuantity: null,
           isChecked: false,
         }));
-
         setCurrentCargo(cargo);
         setProducts(productsWithProgress);
-        setPhotos([]);
-        setBags([]);
-        setSelectedBrands([]);
         setCurrentStep('brand-selection');
       }
       
       return cargo;
-
     } catch (err: any) {
       console.error('Erro ao buscar carga:', err);
-      // Repassamos o erro para a tela de busca poder exibir o toast ou aviso
       throw err; 
     }
-  }, [loadProgress]);
+  }, []);
+
+  const saveProgressToDB = useCallback(async () => {
+    if (!currentCargo) return;
+
+    // Filtra apenas os produtos que já foram conferidos (isChecked)
+    const produtosConferidos = products
+      .filter(p => p.isChecked && p.checkedQuantity !== null)
+      .map(p => ({
+        codigo: p.code,
+        quantidade: p.checkedQuantity,
+        marca: p.brand
+      }));
+
+    if (produtosConferidos.length === 0) return;
+
+    try {
+      await fetch(`/api-local/cargas/${currentCargo.id}/sincronizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          produtos: produtosConferidos,
+          usuario_id: 1 // Aqui você pode passar o ID do usuário logado no futuro
+        })
+      });
+      console.log('Progresso salvo no banco!');
+    } catch (error) {
+      console.error('Erro ao sincronizar com banco de dados:', error);
+    }
+  }, [currentCargo, products]);
 
   const updateProduct = useCallback((code: string, checkedQuantity: number) => {
     setProducts(prev =>
@@ -351,28 +371,36 @@ export function useCargoProgress() {
     setCurrentStep('photos');
   }, []);
 
-  const completeConference = useCallback(() => {
+  const completeConference = useCallback(async () => {
     if (!currentCargo) return;
     
-    const progress: CargoProgress = {
-      cargoId: currentCargo.id,
-      products: products.reduce((acc, p) => {
-        acc[p.code] = {
-          checkedQuantity: p.checkedQuantity,
-          isChecked: p.isChecked,
-        };
-        return acc;
-      }, {} as CargoProgress['products']),
-      photos,
-      bags,
-      currentStep: 'completed',
-      lastUpdated: new Date().toISOString(),
-      actionHistory: [],
-    };
-    
-    localStorage.setItem(`${STORAGE_KEY}-${currentCargo.id}`, JSON.stringify(progress));
-    setCurrentStep('completed');
-  }, [currentCargo, products, photos, bags]);
+    try {
+      // 1. Salva as últimas alterações dos produtos
+      await saveProgressToDB();
+
+      // 2. Envia as fotos para o backend
+      if (photos.length > 0) {
+        await fetch(`/api-local/cargas/${currentCargo.id}/fotos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fotos: photos })
+        });
+      }
+
+      // 3. Finaliza a carga no banco
+      await fetch(`/api-local/cargas/${currentCargo.id}/finalizar`, {
+        method: 'POST'
+      });
+
+      // Limpa o localStorage antigo, já que agora está tudo no banco
+      localStorage.removeItem(`${STORAGE_KEY}-${currentCargo.id}`);
+      setCurrentStep('completed');
+
+    } catch (error) {
+      console.error('Erro ao finalizar a conferência:', error);
+      // Aqui você poderia adicionar um toast de erro para avisar o usuário
+    }
+  }, [currentCargo, photos, saveProgressToDB]);
 
   const getStats = useCallback(() => {
     const total = products.length;
@@ -431,6 +459,7 @@ export function useCargoProgress() {
     checkSavedProgress,
     selectedBrands,
     searchCargo,
+    saveProgressToDB,
     updateProduct,
     addPhoto,
     updatePhotoObservation,
