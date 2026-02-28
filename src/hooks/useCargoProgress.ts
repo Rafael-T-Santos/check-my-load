@@ -2,6 +2,63 @@ import { useState, useCallback, useEffect } from 'react';
 import { Cargo, CargoProgress, Product, PhotoRecord, AppStep, Bag, BrandStatus } from '@/types/cargo';
 import { mockCargos } from '@/data/mockCargos';
 
+interface ApiCargoItem {
+  codProd: number;
+  descrProd: string;
+  marca: string;
+  numNota: number;
+  ordemCarga: number;
+  parceiroRazao: string;
+  placa: string;
+  qtdNeg: number;
+  referencia: string;
+  validaCodBarra: string;
+}
+
+function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
+  const cargoId = apiData[0].ordemCarga.toString();
+  const licensePlate = apiData[0].placa;
+  const productMap = new Map<string, Product>();
+
+  apiData.forEach(item => {
+    const prodCode = item.codProd.toString();
+    const orderId = item.numNota.toString();
+    const quantity = item.qtdNeg;
+
+    if (!productMap.has(prodCode)) {
+      productMap.set(prodCode, {
+        code: prodCode,
+        barcode: item.referencia || '',
+        description: item.descrProd,
+        brand: item.marca || 'SEM MARCA',
+        totalQuantity: 0,
+        checkedQuantity: null,
+        isChecked: false,
+        hasBarcode: item.validaCodBarra === 'S', // Mapeia o "S" para true
+        orders: []
+      });
+    }
+
+    const product = productMap.get(prodCode)!;
+    product.totalQuantity += quantity;
+
+    const existingOrder = product.orders.find(o => o.orderId === orderId);
+    if (existingOrder) {
+      existingOrder.quantity += quantity;
+    } else {
+      product.orders.push({ orderId, quantity });
+    }
+  });
+
+  return {
+    id: cargoId,
+    licensePlate: licensePlate,
+    products: Array.from(productMap.values())
+  };
+}
+// -----------------------------------------------
+
+
 const STORAGE_KEY = 'cargo-progress';
 
 export function useCargoProgress() {
@@ -58,46 +115,74 @@ export function useCargoProgress() {
     localStorage.setItem(`${STORAGE_KEY}-${currentCargo.id}`, JSON.stringify(progress));
   }, [currentCargo, products, photos, bags, currentStep]);
 
-  const searchCargo = useCallback((cargoId: string, continueProgress = false): Cargo | null => {
-    const cargo = mockCargos.find(c => c.id === cargoId);
-    if (!cargo) return null;
-
-    const savedProgress = loadProgress(cargoId);
-    
-    if (savedProgress && continueProgress) {
-      const productsWithProgress = cargo.products.map(product => {
-        const saved = savedProgress.products[product.code];
-        return {
-          ...product,
-          checkedQuantity: saved?.checkedQuantity ?? null,
-          isChecked: saved?.isChecked ?? false,
-        };
+  const searchCargo = useCallback(async (cargoId: string, continueProgress = false): Promise<Cargo | null> => {
+    try {
+      // 1. Faz a requisição real para a API
+      const response = await fetch('http://192.168.255.3/api/consultar-ordem-carga', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // A API espera um número, então convertemos a string para Number
+        body: JSON.stringify({ ordemCarga: Number(cargoId) }) 
       });
 
-      setCurrentCargo(cargo);
-      setProducts(productsWithProgress);
-      setPhotos(savedProgress.photos || []);
-      setBags(savedProgress.bags || []);
-      setSelectedBrands([]);
-      const step = savedProgress.currentStep;
-      setCurrentStep(step === 'completed' ? 'brand-selection' : 
-                     step === 'verification' ? 'brand-selection' : step);
-    } else {
-      const productsWithProgress = cargo.products.map(product => ({
-        ...product,
-        checkedQuantity: null,
-        isChecked: false,
-      }));
+      if (!response.ok) {
+        throw new Error('Falha na comunicação com o servidor');
+      }
 
-      setCurrentCargo(cargo);
-      setProducts(productsWithProgress);
-      setPhotos([]);
-      setBags([]);
-      setSelectedBrands([]);
-      setCurrentStep('brand-selection');
+      const data = await response.json();
+
+      if (!data.sucesso || !data.dados || data.dados.length === 0) {
+        throw new Error('Carga não encontrada ou sem produtos');
+      }
+
+      // 2. Transforma os dados da API pro nosso formato
+      const cargo = transformApiToCargo(data.dados);
+
+      // 3. Verifica se tem progresso salvo (código existente)
+      const savedProgress = loadProgress(cargoId);
+      
+      if (savedProgress && continueProgress) {
+        const productsWithProgress = cargo.products.map(product => {
+          const saved = savedProgress.products[product.code];
+          return {
+            ...product,
+            checkedQuantity: saved?.checkedQuantity ?? null,
+            isChecked: saved?.isChecked ?? false,
+          };
+        });
+
+        setCurrentCargo(cargo);
+        setProducts(productsWithProgress);
+        setPhotos(savedProgress.photos || []);
+        setBags(savedProgress.bags || []);
+        setSelectedBrands([]);
+        const step = savedProgress.currentStep;
+        setCurrentStep(step === 'completed' ? 'brand-selection' : 
+                       step === 'verification' ? 'brand-selection' : step);
+      } else {
+        const productsWithProgress = cargo.products.map(product => ({
+          ...product,
+          checkedQuantity: null,
+          isChecked: false,
+        }));
+
+        setCurrentCargo(cargo);
+        setProducts(productsWithProgress);
+        setPhotos([]);
+        setBags([]);
+        setSelectedBrands([]);
+        setCurrentStep('brand-selection');
+      }
+      
+      return cargo;
+
+    } catch (err: any) {
+      console.error('Erro ao buscar carga:', err);
+      // Repassamos o erro para a tela de busca poder exibir o toast ou aviso
+      throw err; 
     }
-    
-    return cargo;
   }, [loadProgress]);
 
   const updateProduct = useCallback((code: string, checkedQuantity: number) => {

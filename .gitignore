@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Meus arquivos locais
+docker-compose.yml
+Dockerfile
+.dockerignore
+.env

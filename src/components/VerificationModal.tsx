@@ -204,7 +204,7 @@ export function VerificationModal({
                     <Check className="w-5 h-5 text-success" />
                     <span className="text-sm font-medium text-success">
                       {product?.hasBarcode === false
-                        ? 'Produto sem código de barras. Insira a quantidade.'
+                        ? 'Produto não exige validação de código. Insira a quantidade.'
                         : 'Código verificado!'}
                     </span>
                   </div>

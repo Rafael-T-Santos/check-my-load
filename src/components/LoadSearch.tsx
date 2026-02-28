@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 interface LoadSearchProps {
-  onSearch: (cargoId: string) => void;
+  onSearch: (cargoId: string) => Promise<void> | void;
 }
 
 export function LoadSearch({ onSearch }: LoadSearchProps) {
@@ -24,11 +24,15 @@ export function LoadSearch({ onSearch }: LoadSearchProps) {
     setIsSearching(true);
     setError('');
 
-    // Simula delay de busca
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    onSearch(searchId);
-    setIsSearching(false);
+    try {
+      // Agora ele vai esperar a API responder
+      await onSearch(searchId); 
+    } catch (err: any) {
+      // Se a API retornar erro ou a carga não existir, mostramos na tela
+      setError(err.message || 'Erro ao buscar carga no servidor');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -116,12 +120,6 @@ export function LoadSearch({ onSearch }: LoadSearchProps) {
             )}
           </Button>
         </motion.div>
-
-        {/* Hint */}
-        <p className="text-center text-sm text-muted-foreground">
-          Dica: Tente as cargas <span className="font-mono font-semibold">1251</span> ou{' '}
-          <span className="font-mono font-semibold">1252</span>
-        </p>
       </motion.div>
     </div>
   );
