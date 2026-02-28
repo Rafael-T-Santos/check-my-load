@@ -10,6 +10,13 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/api-local': {
+        target: 'http://backend:3000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-local/, '')
+      }
+    }
   },
   plugins: [
     react(), 

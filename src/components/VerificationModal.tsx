@@ -42,7 +42,7 @@ export function VerificationModal({
 
   const validateCode = (code: string) => {
     const isValid = code === product?.code || code === product?.barcode;
-    
+
     if (code.length > 0) {
       if (isValid) {
         playFeedback('success');
@@ -57,8 +57,9 @@ export function VerificationModal({
   };
 
   const handleScan = (scannedCode: string) => {
-    setManualCode(scannedCode);
-    validateCode(scannedCode);
+    const cleanedCode = scannedCode.trim();
+    setManualCode(cleanedCode);
+    validateCode(cleanedCode);
   };
 
   const handleManualCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,7 +152,29 @@ export function VerificationModal({
                     onToggle={() => setIsScannerActive(!isScannerActive)}
                   />
 
-                  <div className="relative">
+                  {/* MUDANÇA AQUI: Tiramos a caixa de erro de dentro do input manual e subimos para cá */}
+                  {showCodeError && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-destructive/10 p-3 rounded-md space-y-2 border border-destructive/20 my-4"
+                    >
+                      <p className="text-sm font-semibold text-destructive flex items-center gap-1 justify-center">
+                        <AlertTriangle className="w-4 h-4" />
+                        Código incorreto
+                      </p>
+                      <div className="text-xs text-center space-y-1">
+                        <p className="text-muted-foreground">
+                          Lido: <span className="font-mono font-bold text-foreground text-sm">{manualCode}</span>
+                        </p>
+                        <p className="text-muted-foreground">
+                          Esperado: <span className="font-mono font-bold text-foreground">{product.barcode || 'Sem EAN'}</span> ou <span className="font-mono">{product.code}</span>
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="relative py-2">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t" />
                     </div>
@@ -182,12 +205,6 @@ export function VerificationModal({
                         }
                         autoFocus
                       />
-                      {showCodeError && (
-                        <p className="text-sm text-destructive flex items-center gap-1">
-                          <AlertTriangle className="w-4 h-4" />
-                          Código não corresponde ao produto
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -220,10 +237,10 @@ export function VerificationModal({
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       className={`text-center text-2xl font-bold h-16 ${quantityMatch
-                          ? 'border-success bg-success-light'
-                          : quantityMismatch
-                            ? 'border-warning bg-warning-light'
-                            : ''
+                        ? 'border-success bg-success-light'
+                        : quantityMismatch
+                          ? 'border-warning bg-warning-light'
+                          : ''
                         }`}
                       autoFocus
                     />

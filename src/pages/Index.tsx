@@ -64,43 +64,52 @@ const Index = () => {
 
   const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
   const [pendingCargoId, setPendingCargoId] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState('');
 
-  const handleSearchSubmit = (cargoId: string) => {
-    setSearchError('');
-    // Check if cargo exists in mock data
-    const exists = searchCargo(cargoId, false);
-    if (!exists) {
-      // searchCargo returns null if not found, but it also sets state.
-      // We need to just test existence without side effects. Let's search fresh:
-      // Actually searchCargo already returns null if not found and doesn't change state.
-      setSearchError('Carga não encontrada');
-      return;
+  // Função central para buscar na API e registrar no histórico
+  const executeSearch = async (id: string, continueProgress: boolean) => {
+    try {
+      await searchCargo(id, continueProgress);
+      addHistoryEntry(
+        'conference_started', 
+        `Conferência da carga #${id} ${continueProgress ? 'retomada' : 'iniciada'}`
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao buscar carga');
+      throw err; 
     }
-    // Cargo was loaded fresh. Now check if there was saved progress.
+  };
+
+  const handleSearchSubmit = async (cargoId: string) => {
     const hasSaved = checkSavedProgress(cargoId);
+    
     if (hasSaved) {
       setPendingCargoId(cargoId);
       setResumeDialogOpen(true);
     } else {
-      addHistoryEntry('conference_started', `Conferência da carga #${cargoId} iniciada`);
+      await executeSearch(cargoId, false);
     }
   };
 
-  const handleContinueProgress = () => {
+  const handleContinueProgress = async () => {
     if (pendingCargoId) {
-      searchCargo(pendingCargoId, true);
-      addHistoryEntry('conference_started', `Conferência da carga #${pendingCargoId} retomada`);
+      try {
+        await executeSearch(pendingCargoId, true);
+      } catch (err) {
+        // O erro já é tratado e exibido no toast dentro do executeSearch
+      }
     }
     setResumeDialogOpen(false);
     setPendingCargoId(null);
   };
 
-  const handleStartFresh = () => {
+  const handleStartFresh = async () => {
     if (pendingCargoId) {
       clearSavedProgress(pendingCargoId);
-      searchCargo(pendingCargoId, false);
-      addHistoryEntry('conference_started', `Conferência da carga #${pendingCargoId} iniciada`);
+      try {
+        await executeSearch(pendingCargoId, false);
+      } catch (err) {
+        // O erro já é tratado no toast
+      }
     }
     setResumeDialogOpen(false);
     setPendingCargoId(null);
