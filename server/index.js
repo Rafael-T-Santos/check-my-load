@@ -9,7 +9,7 @@ app.use(express.json({ limit: '50mb' })); // Limite aumentado para aceitar fotos
 // Ligação ao banco de dados
 const pool = new Pool({
   user: 'checkmyload',
-  host: 'db',
+  host: '127.0.0.1',
   database: 'checkmyloaddb',
   password: 'supersecretpassword',
   port: 5432,

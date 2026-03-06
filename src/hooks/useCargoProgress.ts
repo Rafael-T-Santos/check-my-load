@@ -135,7 +135,7 @@ export function useCargoProgress() {
       // 2. Busca o progresso no nosso NOVO backend local
       let progressoDB = [];
       try {
-        const dbResponse = await fetch(`/api-local/cargas/${cargoId}/progresso`);
+        const dbResponse = await fetch(`http://192.168.255.6:3000/cargas/${cargoId}/progresso`);
         if (dbResponse.ok) {
           progressoDB = await dbResponse.json();
         }
@@ -144,7 +144,7 @@ export function useCargoProgress() {
       }
 
       // 3. Mescla os dados da API com o progresso do Banco
-      if (progressoDB.length > 0 && continueProgress) {
+      if (progressoDB.length > 0) {
         const productsWithProgress = cargo.products.map(product => {
           const savedProd = progressoDB.find((p: any) => p.produto_codigo === product.code);
           return {
@@ -191,7 +191,7 @@ export function useCargoProgress() {
     if (produtosConferidos.length === 0) return;
 
     try {
-      await fetch(`/api-local/cargas/${currentCargo.id}/sincronizar`, {
+      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -204,6 +204,36 @@ export function useCargoProgress() {
       console.error('Erro ao sincronizar com banco de dados:', error);
     }
   }, [currentCargo, products]);
+
+  const syncWithServer = useCallback(async () => {
+    if (!currentCargo) return;
+
+    try {
+      // 1. Envia as conferências locais para o banco (Push)
+      await saveProgressToDB();
+
+      // 2. Busca as novidades que outros usuários podem ter feito (Pull)
+      const dbResponse = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/progresso`);
+      if (dbResponse.ok) {
+        const progressoDB = await dbResponse.json();
+        
+        // 3. Atualiza a tela com a soma do seu trabalho + trabalho dos outros
+        setProducts(prevProducts => prevProducts.map(product => {
+          const savedProd = progressoDB.find((p: any) => p.produto_codigo === product.code);
+          if (savedProd) {
+            return {
+              ...product,
+              checkedQuantity: savedProd.quantidade_conferida,
+              isChecked: true,
+            };
+          }
+          return product;
+        }));
+      }
+    } catch (error) {
+      console.error('Erro na sincronização de mão dupla:', error);
+    }
+  }, [currentCargo, saveProgressToDB]);
 
   const updateProduct = useCallback((code: string, checkedQuantity: number) => {
     setProducts(prev =>
@@ -380,7 +410,7 @@ export function useCargoProgress() {
 
       // 2. Envia as fotos para o backend
       if (photos.length > 0) {
-        await fetch(`/api-local/cargas/${currentCargo.id}/fotos`, {
+        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fotos: photos })
@@ -388,7 +418,7 @@ export function useCargoProgress() {
       }
 
       // 3. Finaliza a carga no banco
-      await fetch(`/api-local/cargas/${currentCargo.id}/finalizar`, {
+      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/finalizar`, {
         method: 'POST'
       });
 
@@ -459,7 +489,6 @@ export function useCargoProgress() {
     checkSavedProgress,
     selectedBrands,
     searchCargo,
-    saveProgressToDB,
     updateProduct,
     addPhoto,
     updatePhotoObservation,
@@ -474,6 +503,8 @@ export function useCargoProgress() {
     clearCargo,
     clearSavedProgress,
     saveProgress,
+    saveProgressToDB,
+    syncWithServer,
     proceedToPhotos,
     completeConference,
     getStats,

@@ -41,6 +41,8 @@ const Index = () => {
     clearCargo,
     clearSavedProgress,
     saveProgress,
+    saveProgressToDB,
+    syncWithServer,
     proceedToPhotos,
     completeConference,
     getStats,
@@ -136,8 +138,25 @@ const Index = () => {
   };
 
   const handleSaveBrands = () => {
-    saveProgress();
+    handleSaveToDatabase();
     toast.success('Progresso salvo!', { description: 'Você pode continuar depois.' });
+  };
+
+  const handleSaveToDatabase = async () => {
+    saveProgress(); // Backup rápido de segurança
+    await syncWithServer(); // Manda os seus dados e puxa os dos outros!
+  };
+
+  // Para os botões "Concluir Marca", "Salvar e Voltar" e "Resolver Divergências"
+  const handleProceedFromProducts = async () => {
+    await handleSaveToDatabase(); // Sincroniza primeiro
+    goToBrandSelection(); // Depois volta pra tela
+  };
+
+  // Para o botão de ir para as fotos
+  const handleProceedToPhotos = async () => {
+    await handleSaveToDatabase(); // Sincroniza primeiro
+    proceedToPhotos(); // Depois vai pras fotos
   };
 
   // Search screen
@@ -207,9 +226,12 @@ const Index = () => {
         products={products}
         onToggleBrand={toggleBrandSelection}
         onStartVerification={goToVerification}
-        onProceedToPhotos={proceedToPhotos}
+        onSave={() => {
+          handleSaveToDatabase();
+          toast.success('Sincronizado!', { description: 'Dados atualizados com o servidor.' });
+        }}
+        onProceedToPhotos={handleProceedToPhotos}
         onBack={clearCargo}
-        onSave={handleSaveBrands}
         allComplete={allBrandsComplete()}
       />
     );
@@ -226,8 +248,11 @@ const Index = () => {
       bags={bags}
       onBack={goToBrandSelection}
       onUpdateProduct={updateProduct}
-      onSave={saveProgress}
-      onProceed={goToBrandSelection}
+      onSave={() => {
+        handleSaveToDatabase();
+        toast.success('Sincronizado!', { description: 'Dados atualizados com o servidor.' });
+      }}
+      onProceed={handleProceedFromProducts}
       onAddBag={addBag}
       onRemoveBag={removeBag}
       getOrderAvailability={getOrderAvailability}
