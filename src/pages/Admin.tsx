@@ -51,6 +51,11 @@ const Admin = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
+
+  // Estados para Detalhes da Carga
+  const [isCargaModalOpen, setIsCargaModalOpen] = useState(false);
+  const [cargaDetalhes, setCargaDetalhes] = useState<any>(null);
+  const [cargaSelecionada, setCargaSelecionada] = useState<string>('');
   
   // Dados do formulário
   const [formData, setFormData] = useState({
@@ -65,8 +70,8 @@ const Admin = () => {
   const fetchAdminData = async () => {
     try {
       const [resCargas, resUsuarios] = await Promise.all([
-        fetch('/api-local/admin/cargas'),
-        fetch('/api-local/admin/usuarios')
+        fetch('http://192.168.255.6:3000/admin/cargas'),
+        fetch('http://192.168.255.6:3000/admin/usuarios')
       ]);
 
       if (resCargas.ok) setCargas(await resCargas.json());
@@ -76,6 +81,25 @@ const Admin = () => {
       toast.error('Erro ao conectar com o servidor.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerDetalhesCarga = async (cargaId: string) => {
+    setCargaSelecionada(cargaId);
+    setCargaDetalhes(null); // Limpa os dados anteriores
+    setIsCargaModalOpen(true);
+
+    try {
+      const response = await fetch(`http://192.168.255.6:3000/admin/cargas/${cargaId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCargaDetalhes(data);
+      } else {
+        toast.error('Erro ao carregar os detalhes desta carga.');
+      }
+    } catch (error) {
+      console.error('Erro ao buscar detalhes:', error);
+      toast.error('Erro de conexão com o servidor.');
     }
   };
 
@@ -120,7 +144,9 @@ const Admin = () => {
     setIsSubmitting(true);
 
     const isEditing = editingUserId !== null;
-    const url = isEditing ? `/api-local/admin/usuarios/${editingUserId}` : '/api-local/admin/usuarios';
+    const url = isEditing 
+      ? `http://192.168.255.6:3000/admin/usuarios/${editingUserId}` 
+      : 'http://192.168.255.6:3000/admin/usuarios';
     const method = isEditing ? 'PUT' : 'POST';
 
     try {
@@ -202,7 +228,11 @@ const Admin = () => {
                     </TableHeader>
                     <TableBody>
                       {cargas.map((carga) => (
-                        <TableRow key={carga.id}>
+                        <TableRow 
+                          key={carga.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleVerDetalhesCarga(carga.id)}
+                        >
                           <TableCell className="font-medium">#{carga.id}</TableCell>
                           <TableCell>{carga.placa || '-'}</TableCell>
                           <TableCell>
@@ -282,6 +312,83 @@ const Admin = () => {
             </CardContent>
           </Card>
         </TabsContent>
+        {/* ---------- MODAL DE DETALHES DA CARGA ---------- */}
+      <Dialog open={isCargaModalOpen} onOpenChange={setIsCargaModalOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Carga #{cargaSelecionada}</DialogTitle>
+            <DialogDescription>
+              Resumo dos produtos conferidos e evidências fotográficas.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {!cargaDetalhes ? (
+            <p className="py-4 text-center text-muted-foreground">Carregando detalhes...</p>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                  <Package className="h-5 w-5" /> Produtos Conferidos ({cargaDetalhes.produtos.length})
+                </h3>
+                {cargaDetalhes.produtos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum produto sincronizado ainda.</p>
+                ) : (
+                  <div className="rounded-md border max-h-[250px] overflow-y-auto">
+                    <Table>
+                      <TableHeader className="bg-muted sticky top-0">
+                        <TableRow>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Marca</TableHead>
+                          <TableHead className="text-center">Qtd</TableHead>
+                          <TableHead>Conferente</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cargaDetalhes.produtos.map((p: any, idx: number) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-mono">{p.produto_codigo}</TableCell>
+                            <TableCell>{p.marca}</TableCell>
+                            <TableCell className="text-center font-bold">{p.quantidade_conferida}</TableCell>
+                            <TableCell>{p.conferente || 'Sistema'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Fotos ({cargaDetalhes.fotos.length})</h3>
+                {cargaDetalhes.fotos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma foto registrada.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {cargaDetalhes.fotos.map((foto: any) => (
+                      <div key={foto.id} className="border rounded-lg p-2 space-y-2">
+                        <img 
+                          src={foto.imagem_base64} 
+                          alt="Evidência" 
+                          className="w-full h-32 object-cover rounded-md"
+                        />
+                        <p className="text-xs text-muted-foreground break-words">
+                          {foto.observacao || 'Sem observação'}
+                        </p>
+                        <p className="text-[10px] text-right font-medium text-primary">
+                          Por: {foto.conferente || 'Sistema'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCargaModalOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </Tabs>
 
       {/* ---------- MODAL DE UTILIZADOR (CRIAR/EDITAR) ---------- */}

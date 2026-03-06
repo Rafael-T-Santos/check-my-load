@@ -240,5 +240,39 @@ app.put('/admin/usuarios/:id', async (req, res) => {
   }
 });
 
+// 1.5 Buscar detalhes de uma carga específica (Admin)
+app.get('/admin/cargas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Busca os produtos conferidos e o nome de quem conferiu
+    const produtos = await pool.query(
+      `SELECT cp.produto_codigo, cp.quantidade_conferida, cp.marca, cp.atualizado_em, u.nome as conferente
+       FROM conferencias_produtos cp
+       LEFT JOIN usuarios u ON cp.conferido_por_usuario_id = u.id
+       WHERE cp.carga_id = $1
+       ORDER BY cp.atualizado_em DESC`,
+      [id]
+    );
+
+    // Busca as fotos da carga
+    const fotos = await pool.query(
+      `SELECT f.id, f.imagem_base64, f.observacao, f.capturado_em, u.nome as conferente
+       FROM fotos f
+       LEFT JOIN usuarios u ON f.usuario_id = u.id
+       WHERE f.carga_id = $1
+       ORDER BY f.capturado_em DESC`,
+      [id]
+    );
+
+    res.json({
+      produtos: produtos.rows,
+      fotos: fotos.rows
+    });
+  } catch (err) {
+    console.error('Erro ao buscar detalhes da carga:', err);
+    res.status(500).json({ error: 'Erro ao buscar detalhes' });
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`🚀 Backend rodando na porta ${PORT}`));

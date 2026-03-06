@@ -208,6 +208,14 @@ export function useCargoProgress() {
   const syncWithServer = useCallback(async () => {
     if (!currentCargo) return;
 
+    // VERIFICAÇÃO DE RESILIÊNCIA: O celular está sem rede (Wi-Fi/4G caiu)?
+    if (!navigator.onLine) {
+      toast.warning('Sem internet! 📶', {
+        description: 'Dados guardados no celular. Sincronizaremos quando a rede voltar.'
+      });
+      return; // Para a função aqui e não tenta fazer o fetch
+    }
+
     try {
       // 1. Envia as conferências locais para o banco (Push)
       await saveProgressToDB();
@@ -231,7 +239,11 @@ export function useCargoProgress() {
         }));
       }
     } catch (error) {
+      // VERIFICAÇÃO DE RESILIÊNCIA: A rede falhou BEM na hora do envio?
       console.error('Erro na sincronização de mão dupla:', error);
+      toast.warning('Conexão fraca! ⚠️', {
+        description: 'Não foi possível sincronizar agora, mas o seu progresso está a salvo.'
+      });
     }
   }, [currentCargo, saveProgressToDB]);
 
