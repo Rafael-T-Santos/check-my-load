@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Package, ShoppingBag, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, ShoppingBag, ChevronRight, User, Check } from 'lucide-react'; // Adicionado User e Check
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Product } from '@/types/cargo';
+import { Badge } from '@/components/ui/badge'; // Adicionado import do Badge
+import { Product, OrderInfo } from '@/types/cargo'; // Adicionado import do OrderInfo
 
 interface OrderSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  orders: { orderId: string; products: { code: string; quantity: number }[] }[];
+  orders: OrderInfo[]; // Usando a tipagem correta que já tem o customerName
   products: Product[];
   getOrderAvailability: (orderId: string) => { hasAvailable: boolean; allInBags: boolean };
   onSelectOrders: (orderIds: string[]) => void;
@@ -40,14 +40,18 @@ export function OrderSelectionModal({
     }
   };
 
-  const getOrderProductCount = (orderId: string) => {
-    return orders.find(o => o.orderId === orderId)?.products.length ?? 0;
-  };
+  // 1. Agrupamos os pedidos pelo nome do cliente
+  const ordersByCustomer = orders.reduce((acc, order) => {
+    const name = order.customerName || 'CLIENTE NÃO INFORMADO';
+    if (!acc[name]) {
+      acc[name] = [];
+    }
+    acc[name].push(order);
+    return acc;
+  }, {} as Record<string, typeof orders>);
 
-  const getOrderTotalQuantity = (orderId: string) => {
-    const order = orders.find(o => o.orderId === orderId);
-    return order?.products.reduce((sum, p) => sum + p.quantity, 0) ?? 0;
-  };
+  // 2. Validação para avançar
+  const canProceed = selectedOrders.length > 0;
 
   return (
     <motion.div
@@ -69,7 +73,7 @@ export function OrderSelectionModal({
         className="relative w-full sm:max-w-lg bg-card rounded-t-3xl sm:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">
               <ShoppingBag className="w-5 h-5 text-primary" />
@@ -89,69 +93,78 @@ export function OrderSelectionModal({
           </button>
         </div>
 
-        {/* Order List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {orders.map((order) => {
-            const availability = getOrderAvailability(order.orderId);
-            const isDisabled = availability.allInBags || !availability.hasAvailable;
-            const isSelected = selectedOrders.includes(order.orderId);
+        {/* Order List - Adicionado flex-1 e overflow-y-auto para poder rolar a tela */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {Object.entries(ordersByCustomer).map(([customerName, customerOrders]) => (
+            <div key={customerName} className="space-y-3">
+              
+              {/* Cabeçalho do Cliente (Parceiro) */}
+              <div className="bg-muted p-3 rounded-lg border border-border/50 flex items-center gap-2">
+                <User className="w-5 h-5 text-muted-foreground shrink-0" />
+                <h3 className="font-bold text-sm text-foreground uppercase tracking-wider truncate">
+                  {customerName}
+                </h3>
+                <Badge variant="secondary" className="ml-auto shrink-0">
+                  {customerOrders.length} pedido(s)
+                </Badge>
+              </div>
+              
+              {/* Pedidos deste Cliente */}
+              <div className="space-y-2 pl-1">
+                {customerOrders.map(order => {
+                  const availability = getOrderAvailability(order.orderId);
+                  const isSelected = selectedOrders.includes(order.orderId);
+                  
+                  // Status visual do pedido
+                  const isFullyBagged = availability.allInBags;
+                  const hasItemsAvailable = availability.hasAvailable;
 
-            return (
-              <motion.div
-                key={order.orderId}
-                whileTap={!isDisabled ? { scale: 0.98 } : undefined}
-                onClick={() => !isDisabled && handleToggleOrder(order.orderId)}
-                className={`
-                  p-4 rounded-xl border-2 transition-all cursor-pointer
-                  ${isDisabled 
-                    ? 'bg-muted/50 border-muted opacity-60 cursor-not-allowed' 
-                    : isSelected 
-                      ? 'bg-primary/5 border-primary' 
-                      : 'bg-card border-border hover:border-primary/50'
-                  }
-                `}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    checked={isSelected}
-                    disabled={isDisabled}
-                    className="mt-1"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold">Pedido {order.orderId}</h3>
-                      {isDisabled && (
-                        <span className="text-xs bg-muted px-2 py-1 rounded-full flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          Em sacolas
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Package className="w-4 h-4" />
-                        {getOrderProductCount(order.orderId)} produtos
-                      </span>
-                      <span>
-                        {getOrderTotalQuantity(order.orderId)} unidades
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
+                  return (
+                    <div
+                      key={order.orderId}
+                      onClick={() => {
+                        if (hasItemsAvailable) {
+                          handleToggleOrder(order.orderId); // Corrigido aqui
+                        }
+                      }}
+                      className={`
+                        p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-4
+                        ${isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card'}
+                        ${!hasItemsAvailable ? 'opacity-50 cursor-not-allowed bg-muted' : 'hover:border-primary/50'}
+                      `}
+                    >
+                      {/* Checkbox visual */}
+                      <div className={`
+                        w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0
+                        ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground'}
+                        ${!hasItemsAvailable ? 'bg-muted border-muted-foreground/30' : ''}
+                      `}>
+                        {isSelected && <Check className="w-4 h-4" />}
+                      </div>
 
-          {orders.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Nenhum pedido disponível</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-bold text-lg truncate">#{order.orderId}</p>
+                          {isFullyBagged && (
+                            <Badge variant="outline" className="bg-success/10 text-success border-success/20 shrink-0">
+                              100% na Sacola
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {order.products.length} produto(s) vinculado(s)
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          )}
+          ))}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t bg-muted/30">
+        <div className="p-4 border-t bg-muted/30 shrink-0">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-muted-foreground">
               {selectedOrders.length} pedido(s) selecionado(s)
@@ -159,7 +172,7 @@ export function OrderSelectionModal({
           </div>
           <Button
             onClick={handleProceed}
-            disabled={selectedOrders.length === 0}
+            disabled={!canProceed}
             className="w-full h-12"
           >
             Selecionar Produtos

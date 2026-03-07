@@ -5,8 +5,6 @@ import { Product, Bag, ActionType } from '@/types/cargo';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from './ProductCard';
 import { VerificationModal } from './VerificationModal';
-import { BagCreationFlow } from './bags/BagCreationFlow';
-import { BagListModal } from './bags/BagListModal';
 import { ProductSearchBar } from './ProductSearchBar';
 import { ProductFiltersDrawer } from './ProductFiltersDrawer';
 import { ActiveFiltersBar } from './ActiveFiltersBar';
@@ -19,17 +17,12 @@ import { ActionHistoryEntry } from '@/types/cargo';
 interface ProductListProps {
   cargoId: string;
   products: Product[];
-  bags: Bag[];
+  bags: Bag[]; // <-- Mantido para o filtro
   onBack: () => void;
   onUpdateProduct: (code: string, quantity: number) => void;
   onSave: () => void;
   onProceed: () => void;
-  onAddBag: (bag: Bag) => void;
-  onRemoveBag: (bagId: string) => void;
-  getOrderAvailability: (orderId: string) => { hasAvailable: boolean; allInBags: boolean };
-  getProductAvailability: (code: string) => { total: number; inBags: number; available: number };
-  getOrdersForCargo: () => { orderId: string; products: { code: string; quantity: number }[] }[];
-  isBagCodeUsed: (code: string) => boolean;
+  getProductAvailability: (code: string) => { total: number; inBags: number; available: number }; // <-- Mantido para o filtro
   stats: {
     total: number;
     checked: number;
@@ -40,24 +33,18 @@ interface ProductListProps {
   actionHistory: ActionHistoryEntry[];
   onAddHistoryEntry: (type: ActionType, description: string, metadata?: Record<string, unknown>) => void;
   onClearHistory: () => void;
-  /** Brand names being verified in this session */
   selectedBrands?: string[];
 }
 
 export function ProductList({
   cargoId,
   products,
-  bags,
+  bags, // <-- Aqui
   onBack,
   onUpdateProduct,
   onSave,
   onProceed,
-  onAddBag,
-  onRemoveBag,
-  getOrderAvailability,
-  getProductAvailability,
-  getOrdersForCargo,
-  isBagCodeUsed,
+  getProductAvailability, // <-- E aqui
   stats,
   canProceed,
   actionHistory,
@@ -139,24 +126,8 @@ export function ProductList({
     }
   };
 
-  const handleBagCreated = (bag: Bag) => {
-    onAddBag(bag);
-    onAddHistoryEntry('bag_created', `Sacola #${bag.id} criada - ${bag.products.length} produtos, ${bag.orders.length} pedidos`, {
-      bagId: bag.id,
-      productCount: bag.products.length,
-      orderCount: bag.orders.length,
-    });
-  };
-
-  const handleBagRemoved = (bagId: string) => {
-    onRemoveBag(bagId);
-    onAddHistoryEntry('bag_deleted', `Sacola #${bagId} excluída`, {
-      bagId,
-    });
-  };
 
   const progressPercentage = (stats.checked / stats.total) * 100;
-  const orders = getOrdersForCargo();
   const hasCheckedProducts = stats.checked > 0;
 
   // Footer button logic for brand mode
@@ -272,29 +243,6 @@ export function ProductList({
         </div>
       </div>
 
-      {/* Bag Actions */}
-      {hasCheckedProducts && (
-        <div className="px-4 pb-4 flex gap-3">
-          <Button
-            onClick={() => setIsBagFlowOpen(true)}
-            variant="outline"
-            className="flex-1 h-12 border-primary/50 text-primary hover:bg-primary/5"
-          >
-            <ShoppingBag className="w-5 h-5 mr-2" />
-            Criar Sacola
-          </Button>
-          {bags.length > 0 && (
-            <Button
-              onClick={() => setIsBagListOpen(true)}
-              variant="outline"
-              className="h-12"
-            >
-              <Eye className="w-5 h-5 mr-2" />
-              Ver ({bags.length})
-            </Button>
-          )}
-        </div>
-      )}
 
       {/* Product List */}
       <div className="flex-1 p-4 space-y-3">
@@ -367,27 +315,6 @@ export function ProductList({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onConfirm={handleConfirm}
-      />
-
-      {/* Bag Creation Flow */}
-      <BagCreationFlow
-        isOpen={isBagFlowOpen}
-        onClose={() => setIsBagFlowOpen(false)}
-        orders={orders}
-        products={products}
-        bags={bags}
-        getOrderAvailability={getOrderAvailability}
-        getProductAvailability={getProductAvailability}
-        isBagCodeUsed={isBagCodeUsed}
-        onCreateBag={handleBagCreated}
-      />
-
-      {/* Bag List Modal */}
-      <BagListModal
-        isOpen={isBagListOpen}
-        onClose={() => setIsBagListOpen(false)}
-        bags={bags}
-        onRemoveBag={handleBagRemoved}
       />
 
       {/* Filters Drawer */}

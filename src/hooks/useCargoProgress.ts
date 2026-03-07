@@ -46,7 +46,12 @@ function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
     if (existingOrder) {
       existingOrder.quantity += quantity;
     } else {
-      product.orders.push({ orderId, quantity });
+      // Adicionamos o customerName pegando do item.parceiroRazao
+      product.orders.push({ 
+        orderId, 
+        quantity, 
+        customerName: item.parceiroRazao || 'CLIENTE NÃO INFORMADO' 
+      });
     }
   });
 
@@ -359,23 +364,33 @@ export function useCargoProgress() {
     };
   }, [products, getProductAvailability]);
 
-  const getOrdersForCargo = useCallback((): { orderId: string; products: { code: string; quantity: number }[] }[] => {
-    const ordersMap = new Map<string, { code: string; quantity: number }[]>();
+  // Atualizamos o tipo de retorno para incluir o customerName
+  const getOrdersForCargo = useCallback((): { orderId: string; customerName: string; products: { code: string; quantity: number }[] }[] => {
+    const ordersMap = new Map<string, { customerName: string; products: { code: string; quantity: number }[] }>();
 
     for (const product of products) {
       for (const order of product.orders) {
         if (!ordersMap.has(order.orderId)) {
-          ordersMap.set(order.orderId, []);
+          // Inicializa o pedido no Map salvando o customerName
+          ordersMap.set(order.orderId, { 
+            customerName: (order as any).customerName || 'CLIENTE NÃO INFORMADO', 
+            products: [] 
+          });
         }
-        ordersMap.get(order.orderId)!.push({
+        ordersMap.get(order.orderId)!.products.push({
           code: product.code,
           quantity: order.quantity,
         });
       }
     }
 
+    // Retorna o array formatado
     return Array.from(ordersMap.entries())
-      .map(([orderId, prods]) => ({ orderId, products: prods }))
+      .map(([orderId, data]) => ({ 
+        orderId, 
+        customerName: data.customerName, 
+        products: data.products 
+      }))
       .sort((a, b) => a.orderId.localeCompare(b.orderId));
   }, [products]);
 

@@ -160,6 +160,15 @@ const Index = () => {
         products={products}
         onToggleBrand={toggleBrandSelection}
         onStartVerification={goToVerification}
+        // --- NOVAS PROPS DE SACOLA AQUI ---
+        bags={bags}
+        onAddBag={addBag}
+        onRemoveBag={removeBag}
+        getOrderAvailability={getOrderAvailability}
+        getProductAvailability={getProductAvailability}
+        getOrdersForCargo={getOrdersForCargo}
+        isBagCodeUsed={isBagCodeUsed}
+        // ----------------------------------
         onSave={() => {
           handleSaveToDatabase();
           toast.success('Sincronizado!', { description: 'Dados atualizados com o servidor.' });
@@ -180,6 +189,7 @@ const Index = () => {
       cargoId={currentCargo.id}
       products={brandProducts}
       bags={bags}
+      getProductAvailability={getProductAvailability}
       onBack={goToBrandSelection}
       onUpdateProduct={updateProduct}
       onSave={() => {
@@ -187,12 +197,6 @@ const Index = () => {
         toast.success('Sincronizado!', { description: 'Dados atualizados com o servidor.' });
       }}
       onProceed={handleProceedFromProducts}
-      onAddBag={addBag}
-      onRemoveBag={removeBag}
-      getOrderAvailability={getOrderAvailability}
-      getProductAvailability={getProductAvailability}
-      getOrdersForCargo={getOrdersForCargo}
-      isBagCodeUsed={isBagCodeUsed}
       stats={brandStats}
       canProceed={canProceedToPhotos()}
       actionHistory={actionHistory}
