@@ -7,6 +7,7 @@ interface ApiCargoItem {
   descrProd: string;
   marca: string;
   numNota: number;
+  nuNota: number;
   ordemCarga: number;
   parceiroRazao: string;
   placa: string;
@@ -22,7 +23,7 @@ function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
 
   apiData.forEach(item => {
     const prodCode = item.codProd.toString();
-    const orderId = item.numNota.toString();
+    const orderId = item.nuNota.toString();
     const quantity = item.qtdNeg;
 
     if (!productMap.has(prodCode)) {
@@ -348,9 +349,13 @@ export function useCargoProgress() {
 
     let hasAnyAvailable = false;
     let allFullyInBags = true;
+    let totalCheckedQty = 0; // <-- NOVO: Contador para saber se conferiu algo
 
     for (const product of orderProducts) {
       const availability = getProductAvailability(product.code);
+      
+      // Soma a quantidade total já conferida desse produto
+      totalCheckedQty += availability.total; 
       
       if (availability.available > 0) {
         hasAnyAvailable = true;
@@ -360,7 +365,8 @@ export function useCargoProgress() {
 
     return {
       hasAvailable: hasAnyAvailable,
-      allInBags: orderProducts.length > 0 && allFullyInBags,
+      // NOVO: Só é "100% na sacola" se existir itens, SE a quantidade conferida for maior que 0 e SE não sobrar nada disponível
+      allInBags: orderProducts.length > 0 && totalCheckedQty > 0 && allFullyInBags,
     };
   }, [products, getProductAvailability]);
 
