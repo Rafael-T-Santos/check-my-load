@@ -7,16 +7,6 @@ import { CompletionScreen } from '@/components/CompletionScreen';
 import { useCargoProgress } from '@/hooks/useCargoProgress';
 import { useActionHistory } from '@/hooks/useActionHistory';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 
 const Index = () => {
   const {
@@ -64,16 +54,13 @@ const Index = () => {
     clearHistory,
   } = useActionHistory(currentCargo?.id ?? null);
 
-  const [resumeDialogOpen, setResumeDialogOpen] = useState(false);
-  const [pendingCargoId, setPendingCargoId] = useState<string | null>(null);
-
-  // Função central para buscar na API e registrar no histórico
-  const executeSearch = async (id: string, continueProgress: boolean) => {
+  // Simplificamos a função: não precisa mais saber se é "continueProgress"
+  const executeSearch = async (id: string) => {
     try {
-      await searchCargo(id, continueProgress);
+      await searchCargo(id);
       addHistoryEntry(
         'conference_started', 
-        `Conferência da carga #${id} ${continueProgress ? 'retomada' : 'iniciada'}`
+        `Conferência da carga #${id} acessada`
       );
     } catch (err: any) {
       toast.error(err.message || 'Erro ao buscar carga');
@@ -81,45 +68,14 @@ const Index = () => {
     }
   };
 
+  // Agora ele simplesmente executa a busca direto
   const handleSearchSubmit = async (cargoId: string) => {
-    const hasSaved = checkSavedProgress(cargoId);
-    
-    if (hasSaved) {
-      setPendingCargoId(cargoId);
-      setResumeDialogOpen(true);
-    } else {
-      await executeSearch(cargoId, false);
-    }
-  };
-
-  const handleContinueProgress = async () => {
-    if (pendingCargoId) {
-      try {
-        await executeSearch(pendingCargoId, true);
-      } catch (err) {
-        // O erro já é tratado e exibido no toast dentro do executeSearch
-      }
-    }
-    setResumeDialogOpen(false);
-    setPendingCargoId(null);
-  };
-
-  const handleStartFresh = async () => {
-    if (pendingCargoId) {
-      clearSavedProgress(pendingCargoId);
-      try {
-        await executeSearch(pendingCargoId, false);
-      } catch (err) {
-        // O erro já é tratado no toast
-      }
-    }
-    setResumeDialogOpen(false);
-    setPendingCargoId(null);
+    await executeSearch(cargoId);
   };
 
   const handleNewConference = () => {
     if (currentCargo) {
-      clearSavedProgress(currentCargo.id);
+      clearSavedProgress(currentCargo.id); // Opcional manter pro localStorage antigo não encher
     }
     clearCargo();
   };
@@ -161,29 +117,7 @@ const Index = () => {
 
   // Search screen
   if (!currentCargo) {
-    return (
-      <>
-        <LoadSearch onSearch={handleSearchSubmit} />
-        <AlertDialog open={resumeDialogOpen} onOpenChange={setResumeDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Progresso encontrado</AlertDialogTitle>
-              <AlertDialogDescription>
-                Encontramos um progresso salvo para a carga #{pendingCargoId}. Deseja continuar de onde parou ou iniciar uma nova conferência?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-              <AlertDialogCancel onClick={handleStartFresh}>
-                Iniciar do Zero
-              </AlertDialogCancel>
-              <AlertDialogAction onClick={handleContinueProgress}>
-                Continuar
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </>
-    );
+    return <LoadSearch onSearch={handleSearchSubmit} />;
   }
 
   // Completion screen
