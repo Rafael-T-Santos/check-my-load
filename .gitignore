@@ -24,7 +24,5 @@ dist-ssr
 *.sw?
 
 # Meus arquivos locais
-docker-compose.yml
-Dockerfile
 .dockerignore
 .env
