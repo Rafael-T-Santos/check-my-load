@@ -155,6 +155,7 @@ const Index = () => {
       <BrandSelection
         cargoId={currentCargo.id}
         licensePlate={currentCargo.licensePlate}
+        dock={currentCargo.dock}
         brandStatuses={getBrandStatuses()}
         selectedBrands={selectedBrands}
         products={products}
@@ -187,6 +188,8 @@ const Index = () => {
   return (
     <ProductList
       cargoId={currentCargo.id}
+      licensePlate={currentCargo.licensePlate}
+      dock={currentCargo.dock}
       products={brandProducts}
       bags={bags}
       getProductAvailability={getProductAvailability}

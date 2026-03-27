@@ -11,6 +11,7 @@ interface ApiCargoItem {
   ordemCarga: number;
   parceiroRazao: string;
   placa: string;
+  doca?: string | null;
   qtdNeg: number;
   referencia: string;
   validaCodBarra: string;
@@ -19,6 +20,7 @@ interface ApiCargoItem {
 function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
   const cargoId = apiData[0].ordemCarga.toString();
   const licensePlate = apiData[0].placa;
+  const dock = apiData[0].doca;
   const productMap = new Map<string, Product>();
 
   apiData.forEach(item => {
@@ -59,6 +61,7 @@ function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
   return {
     id: cargoId,
     licensePlate: licensePlate,
+    dock: dock,
     products: Array.from(productMap.values())
   };
 }

@@ -11,6 +11,7 @@ import { BagListModal } from './bags/BagListModal';
 interface BrandSelectionProps {
   cargoId: string;
   licensePlate: string;
+  dock?: string | null;
   brandStatuses: BrandStatus[];
   selectedBrands: string[];
   products: Product[];
@@ -82,9 +83,22 @@ export function BrandSelection({
           </button>
           <div className="text-center">
             <h1 className="font-bold text-lg">Carga #{cargoId}</h1>
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-              <Truck className="w-3.5 h-3.5" />
-              <span>{licensePlate}</span>
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5" />
+                <span>{licensePlate}</span>
+              </div>
+              
+              {/* === NOVA EXIBIÇÃO DA DOCA === */}
+              {dock !== undefined && (
+                <>
+                  <span>•</span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold">Doca:</span>
+                    <span>{dock || '-'}</span> 
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <button

@@ -19,6 +19,7 @@ export interface Product {
 export interface Cargo {
   id: string;
   licensePlate: string;
+  dock?: string | null;
   products: Product[];
 }
 

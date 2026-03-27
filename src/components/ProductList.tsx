@@ -16,6 +16,8 @@ import { ActionHistoryEntry } from '@/types/cargo';
 
 interface ProductListProps {
   cargoId: string;
+  licensePlate?: string;
+  dock?: string | null;
   products: Product[];
   bags: Bag[]; // <-- Mantido para o filtro
   onBack: () => void;
@@ -174,7 +176,20 @@ export function ProductList({
           </button>
           <div className="text-center">
             <h1 className="font-bold text-lg">Carga #{cargoId}</h1>
-            <p className="text-xs text-muted-foreground">
+            
+            {/* === NOVA EXIBIÇÃO DA PLACA E DOCA === */}
+            {(licensePlate || dock !== undefined) && (
+              <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground mb-0.5">
+                {licensePlate && (
+                   <span className="flex items-center gap-1"><Truck className="w-3 h-3"/> {licensePlate}</span>
+                )}
+                {dock !== undefined && (
+                   <span className="flex items-center gap-1"><span className="font-semibold">Doca:</span> {dock || '-'}</span>
+                )}
+              </div>
+            )}
+            
+            <p className="text-[11px] text-muted-foreground">
               {brandLabel ? `${brandLabel} · ` : ''}{stats.checked}/{stats.total} conferidos
             </p>
           </div>
