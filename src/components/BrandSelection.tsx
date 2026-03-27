@@ -44,6 +44,7 @@ function getBrandPending(products: Product[], brand: string): number {
 export function BrandSelection({
   cargoId,
   licensePlate,
+  dock,
   brandStatuses,
   selectedBrands,
   products,
