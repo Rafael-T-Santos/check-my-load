@@ -42,24 +42,8 @@ export function ProductSelectionModal({
   );
 
   useEffect(() => {
-    // Initialize with all available products selected
-    const initial = new Map<string, SelectedProduct>();
-    orderProducts.forEach(p => {
-      const availability = getProductAvailability(p.code);
-      if (availability.available > 0) {
-        const ordersForProduct = p.orders
-          .filter(o => selectedOrders.includes(o.orderId))
-          .map(o => o.orderId);
-        initial.set(p.code, {
-          code: p.code,
-          description: p.description,
-          quantity: Math.min(availability.available, p.totalQuantity),
-          maxQuantity: availability.available,
-          ordersOrigin: ordersForProduct,
-        });
-      }
-    });
-    setSelectedProducts(initial);
+    // Inicializa com NENHUM produto selecionado (mapa vazio)
+    setSelectedProducts(new Map());
   }, [selectedOrders, products]);
 
   if (!isOpen) return null;
