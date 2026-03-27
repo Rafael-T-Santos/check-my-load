@@ -91,7 +91,7 @@ export function VerificationModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-foreground/50 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-foreground/50 backdrop-blur-sm sm:p-4"
           onClick={onClose}
         >
           <motion.div
@@ -100,10 +100,11 @@ export function VerificationModal({
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+            // Removido o p-4 daqui e transformado em flex column para estruturar Header, Conteúdo e Footer
+            className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] flex flex-col relative overflow-hidden"
           >
-            {/* Header */}
-            <div className="sticky top-0 bg-card p-4 border-b flex items-center justify-between">
+            {/* Header (Fixo no topo) */}
+            <div className="z-20 bg-card p-4 border-b flex items-center justify-between shrink-0 shadow-sm">
               <h2 className="text-lg font-bold">Conferir Produto</h2>
               <button
                 onClick={onClose}
@@ -113,8 +114,8 @@ export function VerificationModal({
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-4 space-y-6">
+            {/* Content (Área Rolável) */}
+            <div className="p-4 space-y-6 overflow-y-auto flex-1 pb-8">
               {/* Product Info */}
               <div className="bg-muted rounded-xl p-4 space-y-2">
                 <div className="flex justify-between items-center">
@@ -152,7 +153,6 @@ export function VerificationModal({
                     onToggle={() => setIsScannerActive(!isScannerActive)}
                   />
 
-                  {/* MUDANÇA AQUI: Tiramos a caixa de erro de dentro do input manual e subimos para cá */}
                   {showCodeError && (
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }}
@@ -236,7 +236,7 @@ export function VerificationModal({
                       placeholder="Digite a quantidade"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
-                      className={`text-center text-2xl font-bold h-16 ${quantityMatch
+                      className={`text-center text-2xl font-bold h-16 shadow-inner ${quantityMatch
                         ? 'border-success bg-success-light'
                         : quantityMismatch
                           ? 'border-warning bg-warning-light'
@@ -257,17 +257,26 @@ export function VerificationModal({
                       </p>
                     )}
                   </div>
-
-                  <Button
-                    onClick={handleConfirm}
-                    disabled={quantity === '' || parseInt(quantity) < 0}
-                    className="w-full h-12 text-lg"
-                  >
-                    Confirmar Conferência
-                  </Button>
                 </motion.div>
               )}
             </div>
+
+            {/* Footer Fixo (Botão de Confirmar) */}
+            {isCodeValid && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="z-20 p-4 bg-card border-t shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] shrink-0"
+              >
+                <Button
+                  onClick={handleConfirm}
+                  disabled={quantity === '' || parseInt(quantity) < 0}
+                  className="w-full h-14 text-lg font-bold shadow-md"
+                >
+                  Confirmar Conferência
+                </Button>
+              </motion.div>
+            )}
           </motion.div>
         </motion.div>
       )}
