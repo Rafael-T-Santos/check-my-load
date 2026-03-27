@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Save, CheckCircle, AlertCircle, Package, ArrowRight, ShoppingBag, Eye, PackageSearch, CornerDownLeft } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, AlertCircle, Package, ArrowRight, ShoppingBag, Eye, PackageSearch, CornerDownLeft, Truck } from 'lucide-react';
 import { Product, Bag, ActionType } from '@/types/cargo';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from './ProductCard';
