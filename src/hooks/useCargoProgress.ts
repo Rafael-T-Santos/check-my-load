@@ -200,7 +200,7 @@ export function useCargoProgress() {
   const saveProgressToDB = useCallback(async () => {
     if (!currentCargo) return;
 
-    // Filtra apenas os produtos que já foram conferidos (isChecked)
+    // 1. Prepara os produtos conferidos
     const produtosConferidos = products
       .filter(p => p.isChecked && p.checkedQuantity !== null)
       .map(p => ({
@@ -209,37 +209,40 @@ export function useCargoProgress() {
         marca: p.brand
       }));
 
-    if (produtosConferidos.length === 0) return;
-
-    try {
-      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          produtos: produtosConferidos,
-          usuario_id: 1 // Aqui você pode passar o ID do usuário logado no futuro
-        })
-      });
-      console.log('Progresso salvo no banco!');
-    } catch (error) {
-      console.error('Erro ao sincronizar com banco de dados:', error);
+    // 2. Salva os produtos APENAS se houver algum produto conferido
+    if (produtosConferidos.length > 0) {
+      try {
+        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            produtos: produtosConferidos,
+            usuario_id: 1 // Aqui você pode passar o ID do usuário logado no futuro
+          })
+        });
+        console.log('Progresso salvo no banco!');
+      } catch (error) {
+        console.error('Erro ao sincronizar com banco de dados:', error);
+      }
     }
 
+    // 3. Salva as sacolas APENAS se houver alguma sacola criada, independentemente dos produtos
     if (bags.length > 0) {
-        try {
-          await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              sacolas: bags,
-              usuario_id: 1 // futuramente pegue do localStorage
-            })
-          });
-        } catch (error) {
-          console.error('Erro ao sincronizar sacolas com banco de dados:', error);
-        }
+      try {
+        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            sacolas: bags,
+            usuario_id: 1 // futuramente pegue do localStorage
+          })
+        });
+        console.log('Sacolas salvas no banco!');
+      } catch (error) {
+        console.error('Erro ao sincronizar sacolas com banco de dados:', error);
       }
-    }, [currentCargo, products, bags]);
+    }
+  }, [currentCargo, products, bags]);
 
   const syncWithServer = useCallback(async () => {
     if (!currentCargo) return;
