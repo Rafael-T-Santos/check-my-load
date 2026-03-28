@@ -74,15 +74,17 @@ export function VerificationModal({
   };
 
   const handleConfirm = () => {
-    const qty = parseInt(quantity);
+    // Trocamos parseInt por Number para aceitar casas decimais
+    const qty = Number(quantity);
     if (isCodeValid && !isNaN(qty) && qty >= 0) {
       onConfirm(product.code, qty);
       onClose();
     }
   };
 
-  const quantityMatch = quantity !== '' && parseInt(quantity) === product.totalQuantity;
-  const quantityMismatch = quantity !== '' && parseInt(quantity) !== product.totalQuantity;
+  // Trocamos parseInt por Number aqui também
+  const quantityMatch = quantity !== '' && Number(quantity) === product.totalQuantity;
+  const quantityMismatch = quantity !== '' && Number(quantity) !== product.totalQuantity;
 
   return (
     <AnimatePresence>
@@ -233,15 +235,16 @@ export function VerificationModal({
                     </label>
                     <Input
                       type="number"
-                      inputMode="numeric"
+                      inputMode="decimal" // <--- Mudamos para decimal para mostrar vírgula no celular
+                      step="any"          // <--- Permite números quebrados no HTML nativo
                       placeholder="Digite a quantidade"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          // Só confirma se a quantidade não estiver vazia e for válida
-                          if (quantity !== '' && parseInt(quantity) >= 0) {
+                          // Trocamos parseInt por Number
+                          if (quantity !== '' && Number(quantity) >= 0) {
                             handleConfirm();
                           }
                         }
@@ -280,7 +283,8 @@ export function VerificationModal({
               >
                 <Button
                   onClick={handleConfirm}
-                  disabled={quantity === '' || parseInt(quantity) < 0}
+                  // Trocamos parseInt por Number aqui também
+                  disabled={quantity === '' || Number(quantity) < 0}
                   className="w-full h-14 text-lg font-bold shadow-md"
                 >
                   Confirmar Conferência
