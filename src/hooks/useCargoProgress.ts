@@ -164,6 +164,20 @@ export function useCargoProgress() {
         console.warn('Não foi possível buscar as sacolas no banco local', e);
       }
 
+      // 2.6 Busca as fotos do banco de dados
+      try {
+        const fotosResponse = await fetch(`http://192.168.255.6:3000/cargas/${cargoId}/fotos`);
+        if (fotosResponse.ok) {
+          const fotosDB = await fotosResponse.json();
+          setPhotos(fotosDB); // Carrega as fotos antigas na tela!
+        } else {
+          setPhotos([]); // Zera se for uma carga nova
+        }
+      } catch (e) {
+        console.warn('Não foi possível buscar as fotos no banco local', e);
+        setPhotos([]);
+      }
+
       // 3. Mescla os dados da API com o progresso do Banco
       if (progressoDB.length > 0) {
         const productsWithProgress = cargo.products.map(product => {

@@ -32,6 +32,21 @@ app.get('/cargas/:id/progresso', async (req, res) => {
   }
 });
 
+// Buscar fotos já salvas da carga
+app.get('/cargas/:id/fotos', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT id, imagem_base64 as "imageData", observacao as "observation", capturado_em as "capturedAt" FROM fotos WHERE carga_id = $1',
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erro ao buscar fotos:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // 2. Sincronizar (Salvar) os produtos conferidos
 app.post('/cargas/:id/sincronizar', async (req, res) => {
   const { id } = req.params;
