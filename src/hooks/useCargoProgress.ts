@@ -70,6 +70,20 @@ function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
 
 const STORAGE_KEY = 'cargo-progress';
 
+function getLoggedUserId(): number {
+  try {
+    // Tenta buscar as informações do usuário logado (pode estar salvo como 'user' ou 'usuario')
+    const userStr = localStorage.getItem('user') || localStorage.getItem('usuario');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      return user.id;
+    }
+  } catch (e) {
+    console.error('Erro ao ler usuário do cache', e);
+  }
+  return 1; // Se der qualquer erro ou não achar, salva no 1 por segurança
+}
+
 export function useCargoProgress() {
   const [currentCargo, setCurrentCargo] = useState<Cargo | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -231,7 +245,7 @@ export function useCargoProgress() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             produtos: produtosConferidos,
-            usuario_id: 1 // Aqui você pode passar o ID do usuário logado no futuro
+            usuario_id: getLoggedUserId() // Aqui você pode passar o ID do usuário logado no futuro
           })
         });
         console.log('Progresso salvo no banco!');
@@ -248,7 +262,7 @@ export function useCargoProgress() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             sacolas: bags,
-            usuario_id: 1 // futuramente pegue do localStorage
+            usuario_id: getLoggedUserId() // futuramente pegue do localStorage
           })
         });
         console.log('Sacolas salvas no banco!');
@@ -461,7 +475,7 @@ export function useCargoProgress() {
         fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sacolas: newBags, usuario_id: 1 })
+          body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
         }).catch(e => console.error('Erro ao salvar sacola no banco:', e));
       }
       return newBags;
@@ -475,7 +489,7 @@ export function useCargoProgress() {
         fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sacolas: newBags, usuario_id: 1 })
+          body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
         }).catch(e => console.error('Erro ao atualizar sacola no banco:', e));
       }
       return newBags;
@@ -489,7 +503,7 @@ export function useCargoProgress() {
         fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sacolas: newBags, usuario_id: 1 })
+          body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
         }).catch(e => console.error('Erro ao remover sacola no banco:', e));
       }
       return newBags;
@@ -530,7 +544,10 @@ export function useCargoProgress() {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fotos: photos })
+          body: JSON.stringify({ 
+            fotos: photos,
+            usuario_id: getLoggedUserId()
+          })
         });
       }
 

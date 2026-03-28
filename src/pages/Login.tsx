@@ -42,7 +42,7 @@ const Login = () => {
 
       if (response.ok && data.sucesso) {
         toast.success(`Bem-vindo(a), ${data.usuario.nome}!`);
-        localStorage.setItem('usuario_logado', JSON.stringify(data.usuario));
+        localStorage.setItem('usuario', JSON.stringify(data.usuario));
         
         if (data.usuario.perfil === 'admin') {
           navigate('/admin', { replace: true });
