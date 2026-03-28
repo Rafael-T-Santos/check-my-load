@@ -100,8 +100,7 @@ export function VerificationModal({
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            // Removido o p-4 daqui e transformado em flex column para estruturar Header, Conteúdo e Footer
-            className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[95vh] flex flex-col relative overflow-hidden"
+            className="w-full max-w-md bg-card rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[85dvh] sm:max-h-[95vh] flex flex-col relative overflow-hidden"
           >
             {/* Header (Fixo no topo) */}
             <div className="z-20 bg-card p-4 border-b flex items-center justify-between shrink-0 shadow-sm">
@@ -238,6 +237,15 @@ export function VerificationModal({
                       placeholder="Digite a quantidade"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          // Só confirma se a quantidade não estiver vazia e for válida
+                          if (quantity !== '' && parseInt(quantity) >= 0) {
+                            handleConfirm();
+                          }
+                        }
+                      }}
                       className={`text-center text-2xl font-bold h-16 shadow-inner ${quantityMatch
                         ? 'border-success bg-success-light'
                         : quantityMismatch
