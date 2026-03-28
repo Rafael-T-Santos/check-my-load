@@ -16,10 +16,10 @@ export function LoadSearch({ onSearch }: LoadSearchProps) {
   
   const navigate = useNavigate(); // <-- Inicialize o navigate
   // Pega o nome do usuário para dar boas-vindas
-  const usuarioLogado = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
+  const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}');
 
   const handleLogout = () => {
-    localStorage.removeItem('usuario_logado'); // Limpa a sessão
+    localStorage.removeItem('usuario'); // Limpa a sessão
     navigate('/', { replace: true }); // Volta pro login limpando o histórico
   };
 

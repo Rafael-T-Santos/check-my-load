@@ -108,7 +108,7 @@ const Admin = () => {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('usuario_logado');
+    localStorage.removeItem('usuario');
     navigate('/');
   };
 
