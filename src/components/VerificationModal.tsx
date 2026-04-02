@@ -87,6 +87,8 @@ export function VerificationModal({
   const quantityMismatchLess = qtyValue !== null && qtyValue >= 0 && qtyValue < product.totalQuantity;
   const quantityMismatchMore = qtyValue !== null && qtyValue > product.totalQuantity;
 
+  const quantityMismatch = quantityMismatchLess || quantityMismatchMore;
+
   return (
     <AnimatePresence>
       {isOpen && (
