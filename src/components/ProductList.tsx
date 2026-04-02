@@ -89,7 +89,10 @@ export function ProductList({
     const product = products.find(p => p.code === code);
     onUpdateProduct(code, quantity);
     
-    const isMatch = product?.totalQuantity === quantity;
+    if (!product) return;
+
+    const isMatch = product.totalQuantity === quantity;
+    const isMore = quantity > product.totalQuantity;
     
     if (isMatch) {
       onAddHistoryEntry('product_checked', `Produto #${code} conferido - ${quantity} unidades`, {
@@ -100,16 +103,17 @@ export function ProductList({
         description: `#${code} - ${quantity} unidades`,
       });
     } else {
-      onAddHistoryEntry('product_warning', `Produto #${code} com atenção - esperado ${product?.totalQuantity}, conferido ${quantity}`, {
+      const statusStr = isMore ? 'A MAIS' : 'A MENOS';
+      onAddHistoryEntry('product_warning', `Produto #${code} com atenção - esperado ${product.totalQuantity}, conferido ${quantity}`, {
         productCode: code,
-        expected: product?.totalQuantity,
+        expected: product.totalQuantity,
         actual: quantity,
       });
       toast.warning('Quantidade divergente!', {
-        description: `Esperado: ${product?.totalQuantity}, Conferido: ${quantity}`,
+        description: `Esperado: ${product.totalQuantity} | Conferido: ${quantity} (${statusStr})`,
       });
     }
-  };
+  };  
 
   const handleSave = () => {
     onSave();

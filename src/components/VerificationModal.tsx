@@ -82,9 +82,10 @@ export function VerificationModal({
     }
   };
 
-  // Trocamos parseInt por Number aqui também
-  const quantityMatch = quantity !== '' && Number(quantity) === product.totalQuantity;
-  const quantityMismatch = quantity !== '' && Number(quantity) !== product.totalQuantity;
+  const qtyValue = quantity !== '' ? Number(quantity) : null;
+  const quantityMatch = qtyValue !== null && qtyValue === product.totalQuantity;
+  const quantityMismatchLess = qtyValue !== null && qtyValue >= 0 && qtyValue < product.totalQuantity;
+  const quantityMismatchMore = qtyValue !== null && qtyValue > product.totalQuantity;
 
   return (
     <AnimatePresence>
@@ -263,10 +264,16 @@ export function VerificationModal({
                         Quantidade correta!
                       </p>
                     )}
-                    {quantityMismatch && (
+                    {quantityMismatchLess && (
                       <p className="text-sm text-warning flex items-center gap-1 justify-center">
                         <AlertTriangle className="w-4 h-4" />
-                        Quantidade diferente do esperado ({product.totalQuantity} un.)
+                        Quantidade menor que o esperado ({product.totalQuantity} un.)
+                      </p>
+                    )}
+                    {quantityMismatchMore && (
+                      <p className="text-sm text-warning flex items-center gap-1 justify-center">
+                        <AlertTriangle className="w-4 h-4" />
+                        Quantidade maior que o esperado ({product.totalQuantity} un.)
                       </p>
                     )}
                   </div>
