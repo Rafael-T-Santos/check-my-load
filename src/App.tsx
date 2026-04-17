@@ -5,7 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
-import Admin from '@/pages/Admin';
+import AdminLayout from '@/pages/admin/AdminLayout';
+import AdminCargas from '@/pages/admin/AdminCargas';
+import AdminUsuarios from '@/pages/admin/AdminUsuarios';
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,7 +40,10 @@ const App = () => (
           
           {/* Rotas Privadas (Protegidas) */}
           <Route path="/cargo" element={<PrivateRoute><Index /></PrivateRoute>} />
-          <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute><AdminLayout /></PrivateRoute>}>
+            <Route index element={<AdminCargas />} />
+            <Route path="usuarios" element={<AdminUsuarios />} />
+          </Route>
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
