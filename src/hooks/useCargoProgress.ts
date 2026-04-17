@@ -249,9 +249,10 @@ export function useCargoProgress() {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             produtos: produtosConferidos,
-            usuario_id: getLoggedUserId() // Aqui você pode passar o ID do usuário logado no futuro
+            usuario_id: getLoggedUserId(),
+            placa: currentCargo.licensePlate
           })
         });
         console.log('Progresso salvo no banco!');
@@ -266,9 +267,10 @@ export function useCargoProgress() {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             sacolas: bags,
-            usuario_id: getLoggedUserId() // futuramente pegue do localStorage
+            usuario_id: getLoggedUserId(),
+            placa: currentCargo.licensePlate
           })
         });
         console.log('Sacolas salvas no banco!');
@@ -550,9 +552,10 @@ export function useCargoProgress() {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             fotos: photos,
-            usuario_id: getLoggedUserId()
+            usuario_id: getLoggedUserId(),
+            placa: currentCargo.licensePlate
           })
         });
       }

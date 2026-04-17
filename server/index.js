@@ -50,17 +50,19 @@ app.get('/cargas/:id/fotos', async (req, res) => {
 // 2. Sincronizar (Salvar) os produtos conferidos
 app.post('/cargas/:id/sincronizar', async (req, res) => {
   const { id } = req.params;
-  const { produtos, usuario_id } = req.body;
+  const { produtos, usuario_id, placa } = req.body;
   const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
 
     const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [id]
+      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       RETURNING (xmax = 0) AS inserido`,
+      [id, placa || null]
     );
-    const cargaNova = cargaResult.rowCount > 0;
+    const cargaNova = cargaResult.rows[0]?.inserido === true;
 
     // Busca quantidades anteriores para registrar no histórico
     const qtdAnteriorResult = await pool.query(
@@ -110,17 +112,19 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
 // 3. Salvar Fotos da Conferência
 app.post('/cargas/:id/fotos', async (req, res) => {
   const { id } = req.params;
-  const { fotos, usuario_id } = req.body;
+  const { fotos, usuario_id, placa } = req.body;
   const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
 
     const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [id]
+      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       RETURNING (xmax = 0) AS inserido`,
+      [id, placa || null]
     );
-    const cargaNova = cargaResult.rowCount > 0;
+    const cargaNova = cargaResult.rows[0]?.inserido === true;
 
     for (const foto of fotos) {
       const fotoResult = await pool.query(
@@ -259,17 +263,19 @@ app.get('/cargas/:id/sacolas', async (req, res) => {
 // Salvar/Sincronizar sacolas da carga
 app.post('/cargas/:id/sacolas', async (req, res) => {
   const { id } = req.params;
-  const { sacolas, usuario_id } = req.body;
+  const { sacolas, usuario_id, placa } = req.body;
   const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
 
     const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [id]
+      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       RETURNING (xmax = 0) AS inserido`,
+      [id, placa || null]
     );
-    const cargaNova = cargaResult.rowCount > 0;
+    const cargaNova = cargaResult.rows[0]?.inserido === true;
 
     for (const sacola of sacolas) {
       // 1. Insere a sacola — RETURNING detecta se é nova

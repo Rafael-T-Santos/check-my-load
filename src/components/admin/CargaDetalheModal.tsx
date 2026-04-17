@@ -67,6 +67,9 @@ interface ErpItem {
   marca: string;
   qtdNeg: number;
   codVol: string;
+  nomeMotorista: string;
+  doca: number;
+  horaSaida: string;
 }
 
 type StatusConferencia = 'conferido' | 'pendente' | 'divergente' | 'excedente' | 'sem_previsao';
@@ -272,6 +275,16 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
     excedentes: produtosCruzados.filter(p => p.status === 'excedente').length,
   }), [produtosCruzados]);
 
+  const erpInfo = useMemo(() => {
+    if (!erpData || erpData.length === 0) return null;
+    const primeiro = erpData[0];
+    return {
+      motorista: primeiro.nomeMotorista || null,
+      doca: primeiro.doca ?? null,
+      horaSaida: primeiro.horaSaida || null,
+    };
+  }, [erpData]);
+
   const isLoading = loadingLocal || loadingERP;
   const formatarData = (d: string) => d ? new Date(d).toLocaleString('pt-BR') : '-';
 
@@ -307,6 +320,9 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
           </DialogTitle>
           <DialogDescription className="flex flex-wrap gap-4 text-xs mt-1">
             {carga.placa && <span>Placa: <strong className="text-foreground">{carga.placa}</strong></span>}
+            {erpInfo?.motorista && <span>Motorista: <strong className="text-foreground">{erpInfo.motorista}</strong></span>}
+            {erpInfo?.doca != null && <span>Doca: <strong className="text-foreground">{erpInfo.doca}</strong></span>}
+            {erpInfo?.horaSaida && <span>Saída: <strong className="text-foreground">{formatarData(erpInfo.horaSaida)}</strong></span>}
             <span>Criado: <strong className="text-foreground">{formatarData(carga.criado_em)}</strong></span>
             <span>Atualizado: <strong className="text-foreground">{formatarData(carga.atualizado_em)}</strong></span>
           </DialogDescription>
