@@ -165,13 +165,15 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
     }
 
     // Agrupa ERP por codProd somando qtdNeg
+    // codProd vem como number no JSON mas produto_codigo é string no banco — normaliza para string
     const erpMap = new Map<string, { descricao: string; marca: string; qtdEsperada: number }>();
     for (const item of erpData) {
-      const existing = erpMap.get(item.codProd);
+      const key = String(item.codProd);
+      const existing = erpMap.get(key);
       if (existing) {
         existing.qtdEsperada += item.qtdNeg;
       } else {
-        erpMap.set(item.codProd, { descricao: item.descrProd, marca: item.marca, qtdEsperada: item.qtdNeg });
+        erpMap.set(key, { descricao: item.descrProd, marca: item.marca, qtdEsperada: item.qtdNeg });
       }
     }
 
