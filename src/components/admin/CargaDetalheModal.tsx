@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ElementType } from 'react';
 import {
   Package, Image, ShoppingBag, AlertTriangle, LayoutList,
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
+  History, Unlock, Camera, CheckSquare, Flag,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -81,9 +82,27 @@ interface ProdutoCruzado {
   status: StatusConferencia;
 }
 
+interface HistoricoAcao {
+  id: number;
+  acao: string;
+  detalhes: Record<string, unknown>;
+  criado_em: string;
+  usuario: string;
+}
+
+// ─── Ação config (timeline) ───────────────────────────────────────────────────
+
+const ACAO_CONFIG: Record<string, { label: string; cor: string; icon: ElementType }> = {
+  carga_aberta:      { label: 'Conferência aberta',    cor: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Unlock },
+  produto_conferido: { label: 'Produto conferido',     cor: 'bg-blue-100 text-blue-700 border-blue-200',          icon: CheckSquare },
+  foto_adicionada:   { label: 'Foto adicionada',       cor: 'bg-purple-100 text-purple-700 border-purple-200',    icon: Camera },
+  sacola_criada:     { label: 'Sacola criada',         cor: 'bg-amber-100 text-amber-700 border-amber-200',       icon: ShoppingBag },
+  carga_finalizada:  { label: 'Conferência finalizada', cor: 'bg-gray-100 text-gray-700 border-gray-200',         icon: Flag },
+};
+
 // ─── Status config ────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<StatusConferencia, { label: string; color: string; icon: React.ElementType }> = {
+const STATUS_CONFIG: Record<StatusConferencia, { label: string; color: string; icon: ElementType }> = {
   conferido:    { label: 'Conferido',    color: 'bg-emerald-100 text-emerald-800', icon: CheckCircle },
   pendente:     { label: 'Pendente',     color: 'bg-amber-100 text-amber-800',     icon: MinusCircle },
   divergente:   { label: 'Divergente',   color: 'bg-red-100 text-red-800',         icon: XCircle },
@@ -104,6 +123,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
   const [localData, setLocalData] = useState<{ produtos: ProdutoDB[]; fotos: FotoDB[] } | null>(null);
   const [sacolas, setSacolas] = useState<SacolaDB[] | null>(null);
   const [erpData, setErpData] = useState<ErpItem[] | null>(null);
+  const [historico, setHistorico] = useState<HistoricoAcao[]>([]);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
@@ -148,8 +168,18 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
       }
     };
 
+    const fetchHistorico = async () => {
+      try {
+        const res = await fetch(`http://192.168.255.6:3000/admin/cargas/${carga.id}/historico`);
+        if (res.ok) setHistorico(await res.json());
+      } catch (e) {
+        console.error('Erro ao buscar histórico:', e);
+      }
+    };
+
     fetchLocal();
     fetchERP();
+    fetchHistorico();
   }, [carga.id]);
 
   // ─── Cross-reference ─────────────────────────────────────────────────────
@@ -311,6 +341,9 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
               <TabsTrigger value="fotos" className="flex items-center gap-1.5">
                 <Image className="h-4 w-4" /> Fotos ({localData?.fotos.length ?? 0})
               </TabsTrigger>
+              <TabsTrigger value="atividade" className="flex items-center gap-1.5">
+                <History className="h-4 w-4" /> Atividade ({historico.length})
+              </TabsTrigger>
             </TabsList>
 
             <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
@@ -368,7 +401,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                 {produtosCruzados.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4">Nenhum produto registrado.</p>
                 ) : (
-                  <div className="rounded-md border overflow-hidden">
+                  <div className="rounded-md border overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-muted/50 sticky top-0 z-10">
                         <TableRow>
@@ -416,7 +449,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                     <p className="text-sm text-muted-foreground">Todos os produtos foram conferidos corretamente.</p>
                   </div>
                 ) : (
-                  <div className="rounded-md border overflow-hidden">
+                  <div className="rounded-md border overflow-x-auto">
                     <Table>
                       <TableHeader className="bg-muted/50 sticky top-0 z-10">
                         <TableRow>
@@ -485,7 +518,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                           </div>
                         )}
                         {sacola.products.length > 0 && (
-                          <div className="rounded-md border overflow-hidden">
+                          <div className="rounded-md border overflow-x-auto">
                             <Table>
                               <TableHeader className="bg-muted/50">
                                 <TableRow>
@@ -559,6 +592,69 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                       </div>
                     ))}
                   </div>
+                )}
+              </TabsContent>
+
+              {/* ── ATIVIDADE ──────────────────────────────────────────── */}
+              <TabsContent value="atividade" className="mt-0">
+                {historico.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">Nenhuma atividade registrada.</p>
+                ) : (
+                  <ol className="relative border-l border-muted ml-3 space-y-0">
+                    {historico.map((item) => {
+                      const cfg = ACAO_CONFIG[item.acao] ?? {
+                        label: item.acao,
+                        cor: 'bg-gray-100 text-gray-700 border-gray-200',
+                        icon: History,
+                      };
+                      const Icon = cfg.icon;
+                      const det = item.detalhes ?? {};
+
+                      return (
+                        <li key={item.id} className="mb-6 ml-6">
+                          <span className={cn(
+                            'absolute -left-3 flex h-6 w-6 items-center justify-center rounded-full border',
+                            cfg.cor,
+                          )}>
+                            <Icon className="h-3 w-3" />
+                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-medium">{cfg.label}</span>
+                              {item.usuario && (
+                                <span className="text-xs text-muted-foreground">por {item.usuario}</span>
+                              )}
+                              <time className="ml-auto text-[10px] text-muted-foreground">
+                                {formatarData(item.criado_em)}
+                              </time>
+                            </div>
+
+                            {item.acao === 'produto_conferido' && (
+                              <p className="text-xs text-muted-foreground">
+                                Cód. {String(det.produto_codigo)}
+                                {det.marca ? ` — ${String(det.marca)}` : ''}
+                                {' · '}
+                                {det.qtd_anterior !== null && det.qtd_anterior !== undefined
+                                  ? `${det.qtd_anterior} → ${det.qtd_nova}`
+                                  : `Qtd: ${det.qtd_nova}`}
+                              </p>
+                            )}
+                            {item.acao === 'foto_adicionada' && det.observacao && (
+                              <p className="text-xs text-muted-foreground">{String(det.observacao)}</p>
+                            )}
+                            {item.acao === 'sacola_criada' && (
+                              <p className="text-xs text-muted-foreground">
+                                Sacola {String(det.sacola_id)}
+                                {Array.isArray(det.pedidos) && det.pedidos.length > 0
+                                  ? ` — Pedidos: ${det.pedidos.join(', ')}`
+                                  : ''}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 )}
               </TabsContent>
 

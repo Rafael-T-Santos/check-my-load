@@ -559,7 +559,9 @@ export function useCargoProgress() {
 
       // 3. Finaliza a carga no banco
       await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/finalizar`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: getLoggedUserId() })
       });
 
       // Limpa o localStorage antigo, já que agora está tudo no banco

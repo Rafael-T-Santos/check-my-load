@@ -50,25 +50,51 @@ app.get('/cargas/:id/fotos', async (req, res) => {
 // 2. Sincronizar (Salvar) os produtos conferidos
 app.post('/cargas/:id/sincronizar', async (req, res) => {
   const { id } = req.params;
-  const { produtos, usuario_id } = req.body; 
+  const { produtos, usuario_id } = req.body;
+  const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
 
-    await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+    const cargaResult = await pool.query(
+      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
       [id]
     );
+    const cargaNova = cargaResult.rowCount > 0;
+
+    // Busca quantidades anteriores para registrar no histórico
+    const qtdAnteriorResult = await pool.query(
+      `SELECT produto_codigo, quantidade_conferida::FLOAT FROM conferencias_produtos WHERE carga_id = $1`,
+      [id]
+    );
+    const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.produto_codigo, r.quantidade_conferida]));
 
     for (const prod of produtos) {
       await pool.query(
         `INSERT INTO conferencias_produtos (carga_id, produto_codigo, quantidade_conferida, conferido_por_usuario_id, marca)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (carga_id, produto_codigo) 
-         DO UPDATE SET quantidade_conferida = EXCLUDED.quantidade_conferida, 
+         ON CONFLICT (carga_id, produto_codigo)
+         DO UPDATE SET quantidade_conferida = EXCLUDED.quantidade_conferida,
                        conferido_por_usuario_id = EXCLUDED.conferido_por_usuario_id,
                        atualizado_em = CURRENT_TIMESTAMP`,
-        [id, prod.codigo, prod.quantidade, usuario_id || 1, prod.marca]
+        [id, prod.codigo, prod.quantidade, uid, prod.marca]
+      );
+
+      await pool.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'produto_conferido', JSON.stringify({
+          produto_codigo: prod.codigo,
+          marca: prod.marca,
+          qtd_anterior: qtdAnteriorMap.get(prod.codigo) ?? null,
+          qtd_nova: prod.quantidade
+        })]
+      );
+    }
+
+    if (cargaNova) {
+      await pool.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'carga_aberta', JSON.stringify({})]
       );
     }
 
@@ -85,21 +111,40 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
 app.post('/cargas/:id/fotos', async (req, res) => {
   const { id } = req.params;
   const { fotos, usuario_id } = req.body;
+  const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
-    
-    await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+
+    const cargaResult = await pool.query(
+      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
       [id]
     );
+    const cargaNova = cargaResult.rowCount > 0;
 
     for (const foto of fotos) {
-      await pool.query(
+      const fotoResult = await pool.query(
         `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO NOTHING`,
-        [foto.id, id, usuario_id || 1, foto.imageData, foto.observation]
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [foto.id, id, uid, foto.imageData, foto.observation]
+      );
+
+      if (fotoResult.rowCount > 0) {
+        await pool.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+          [id, uid, 'foto_adicionada', JSON.stringify({
+            foto_id: foto.id,
+            observacao: foto.observation || null
+          })]
+        );
+      }
+    }
+
+    if (cargaNova) {
+      await pool.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'carga_aberta', JSON.stringify({})]
       );
     }
 
@@ -115,14 +160,26 @@ app.post('/cargas/:id/fotos', async (req, res) => {
 // 4. Finalizar a Carga
 app.post('/cargas/:id/finalizar', async (req, res) => {
   const { id } = req.params;
+  const { usuario_id } = req.body;
+  const uid = usuario_id || 1;
 
   try {
+    await pool.query('BEGIN');
+
     await pool.query(
       `UPDATE conferencias_cargas SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
       [id]
     );
+
+    await pool.query(
+      `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+      [id, uid, 'carga_finalizada', JSON.stringify({})]
+    );
+
+    await pool.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
+    await pool.query('ROLLBACK');
     console.error('Erro ao finalizar carga:', err);
     res.status(500).json({ error: 'Erro ao finalizar carga' });
   }
@@ -203,24 +260,35 @@ app.get('/cargas/:id/sacolas', async (req, res) => {
 app.post('/cargas/:id/sacolas', async (req, res) => {
   const { id } = req.params;
   const { sacolas, usuario_id } = req.body;
+  const uid = usuario_id || 1;
 
   try {
     await pool.query('BEGIN');
 
-    // Garante que a carga existe
-    await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
+    const cargaResult = await pool.query(
+      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id`,
       [id]
     );
+    const cargaNova = cargaResult.rowCount > 0;
 
     for (const sacola of sacolas) {
-      // 1. Insere a sacola
-      await pool.query(
+      // 1. Insere a sacola — RETURNING detecta se é nova
+      const sacolaResult = await pool.query(
         `INSERT INTO sacolas (id, carga_id, usuario_id, criado_em)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO NOTHING`,
-        [sacola.id, id, usuario_id || 1, sacola.createdAt]
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [sacola.id, id, uid, sacola.createdAt]
       );
+
+      if (sacolaResult.rowCount > 0) {
+        await pool.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+          [id, uid, 'sacola_criada', JSON.stringify({
+            sacola_id: sacola.id,
+            pedidos: sacola.orders
+          })]
+        );
+      }
 
       // 2. Insere os pedidos da sacola
       for (const pedidoId of sacola.orders) {
@@ -244,13 +312,20 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
 
       // 4. Insere as fotos
       for (const foto of sacola.photos) {
-         await pool.query(
+        await pool.query(
           `INSERT INTO sacolas_fotos (id, sacola_id, imagem_base64, observacao, capturado_em)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT (id) DO NOTHING`,
           [foto.id, sacola.id, foto.imageData, foto.observation || null, foto.capturedAt || new Date()]
         );
       }
+    }
+
+    if (cargaNova) {
+      await pool.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'carga_aberta', JSON.stringify({})]
+      );
     }
 
     await pool.query('COMMIT');
@@ -387,6 +462,25 @@ app.get('/admin/cargas/:id', async (req, res) => {
   } catch (err) {
     console.error('Erro ao buscar detalhes da carga:', err);
     res.status(500).json({ error: 'Erro ao buscar detalhes' });
+  }
+});
+
+// Histórico de ações de uma carga
+app.get('/admin/cargas/:id/historico', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT h.id, h.acao, h.detalhes, h.criado_em, u.nome AS usuario
+       FROM historico_acoes h
+       LEFT JOIN usuarios u ON u.id = h.usuario_id
+       WHERE h.carga_id = $1
+       ORDER BY h.criado_em ASC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erro ao buscar histórico:', err);
+    res.status(500).json({ error: 'Erro ao buscar histórico' });
   }
 });
 

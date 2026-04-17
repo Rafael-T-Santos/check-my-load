@@ -84,3 +84,15 @@ CREATE TABLE IF NOT EXISTS sacolas_fotos (
     observacao TEXT,
     capturado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Histórico de Ações por Carga
+CREATE TABLE IF NOT EXISTS historico_acoes (
+    id         SERIAL PRIMARY KEY,
+    carga_id   VARCHAR(50) REFERENCES conferencias_cargas(id),
+    usuario_id INTEGER REFERENCES usuarios(id),
+    acao       VARCHAR(50) NOT NULL,
+    detalhes   JSONB,
+    criado_em  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_historico_carga
+    ON historico_acoes(carga_id, criado_em DESC);
