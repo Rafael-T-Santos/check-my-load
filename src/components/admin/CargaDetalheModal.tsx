@@ -45,12 +45,19 @@ interface SacolaProduto {
   quantity: number;
 }
 
+interface SacolaFoto {
+  id: string;
+  imageData: string;
+  observation: string;
+  capturedAt: string;
+}
+
 interface SacolaDB {
   id: string;
   createdAt: string;
   orders: string[];
   products: SacolaProduto[];
-  photos: { id: string }[];
+  photos: SacolaFoto[];
 }
 
 interface ErpItem {
@@ -356,7 +363,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                 ) : (
                   <div className="rounded-md border overflow-hidden">
                     <Table>
-                      <TableHeader className="bg-muted/50">
+                      <TableHeader className="bg-muted/50 sticky top-0 z-10">
                         <TableRow>
                           <TableHead>Código</TableHead>
                           <TableHead>Descrição</TableHead>
@@ -402,7 +409,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                 ) : (
                   <div className="rounded-md border overflow-hidden">
                     <Table>
-                      <TableHeader className="bg-muted/50">
+                      <TableHeader className="bg-muted/50 sticky top-0 z-10">
                         <TableRow>
                           <TableHead>Código</TableHead>
                           <TableHead>Descrição</TableHead>
@@ -489,7 +496,26 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                           </div>
                         )}
                         {sacola.photos.length > 0 && (
-                          <p className="text-xs text-muted-foreground">{sacola.photos.length} foto(s) nesta sacola</p>
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground font-medium">{sacola.photos.length} foto(s)</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {sacola.photos.map(foto => (
+                                <div key={foto.id} className="border rounded-lg overflow-hidden">
+                                  <img
+                                    src={foto.imageData}
+                                    alt="Foto da sacola"
+                                    className="w-full h-36 object-cover"
+                                  />
+                                  <div className="p-2 space-y-1">
+                                    <p className="text-xs text-muted-foreground break-words line-clamp-2">
+                                      {foto.observation || 'Sem observação'}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">{formatarData(foto.capturedAt)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
                     ))}
