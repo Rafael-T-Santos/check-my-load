@@ -65,6 +65,7 @@ interface ErpItem {
   descrProd: string;
   marca: string;
   qtdNeg: number;
+  codVol: string;
 }
 
 type StatusConferencia = 'conferido' | 'pendente' | 'divergente' | 'excedente' | 'sem_previsao';
@@ -73,6 +74,7 @@ interface ProdutoCruzado {
   codigo: string;
   descricao: string;
   marca: string;
+  unidade: string;
   qtdEsperada: number | null;
   qtdConferida: number | null;
   conferente: string;
@@ -164,6 +166,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
         codigo: p.produto_codigo,
         descricao: '-',
         marca: p.marca || '-',
+        unidade: '-',
         qtdEsperada: null,
         qtdConferida: p.quantidade_conferida,
         conferente: p.conferente || 'Sistema',
@@ -173,14 +176,14 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
 
     // Agrupa ERP por codProd somando qtdNeg
     // codProd vem como number no JSON mas produto_codigo é string no banco — normaliza para string
-    const erpMap = new Map<string, { descricao: string; marca: string; qtdEsperada: number }>();
+    const erpMap = new Map<string, { descricao: string; marca: string; unidade: string; qtdEsperada: number }>();
     for (const item of erpData) {
       const key = String(item.codProd);
       const existing = erpMap.get(key);
       if (existing) {
         existing.qtdEsperada += item.qtdNeg;
       } else {
-        erpMap.set(key, { descricao: item.descrProd, marca: item.marca, qtdEsperada: item.qtdNeg });
+        erpMap.set(key, { descricao: item.descrProd, marca: item.marca, unidade: item.codVol ?? '-', qtdEsperada: item.qtdNeg });
       }
     }
 
@@ -202,6 +205,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
         codigo,
         descricao: erp.descricao,
         marca: erp.marca,
+        unidade: erp.unidade,
         qtdEsperada: erp.qtdEsperada,
         qtdConferida: local?.quantidade_conferida ?? null,
         conferente: local?.conferente ?? '-',
@@ -216,6 +220,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
           codigo,
           descricao: '-',
           marca: local.marca || '-',
+          unidade: '-',
           qtdEsperada: null,
           qtdConferida: local.quantidade_conferida,
           conferente: local.conferente || 'Sistema',
@@ -232,8 +237,9 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
   const resumeStats = useMemo(() => ({
     total: produtosCruzados.length,
     conferidos: produtosCruzados.filter(p => p.status === 'conferido').length,
-    divergentes: produtosCruzados.filter(p => p.status === 'divergente').length,
     pendentes: produtosCruzados.filter(p => p.status === 'pendente').length,
+    divergentes: produtosCruzados.filter(p => p.status === 'divergente').length,
+    excedentes: produtosCruzados.filter(p => p.status === 'excedente').length,
   }), [produtosCruzados]);
 
   const isLoading = loadingLocal || loadingERP;
@@ -317,12 +323,13 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                     API ERP indisponível. Os totais abaixo refletem apenas os dados locais.
                   </div>
                 )}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                   {[
                     { label: 'Total de Produtos', value: resumeStats.total, color: '' },
                     { label: 'Conferidos', value: resumeStats.conferidos, color: 'text-emerald-600' },
                     { label: 'Pendentes', value: resumeStats.pendentes, color: 'text-amber-600' },
                     { label: 'Divergentes', value: resumeStats.divergentes, color: 'text-red-600' },
+                    { label: 'Excedentes', value: resumeStats.excedentes, color: 'text-blue-600' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="bg-muted/50 rounded-lg p-3 text-center">
                       <p className={cn('text-2xl font-bold', color)}>{value}</p>
@@ -368,6 +375,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                           <TableHead>Código</TableHead>
                           <TableHead>Descrição</TableHead>
                           <TableHead>Marca</TableHead>
+                          <TableHead className="text-center">Unid.</TableHead>
                           <TableHead className="text-center">Previsto</TableHead>
                           <TableHead className="text-center">Conferido</TableHead>
                           <TableHead>Conferente</TableHead>
@@ -386,6 +394,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                             <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
                             <TableCell className="text-xs max-w-[140px] truncate" title={p.descricao}>{p.descricao}</TableCell>
                             <TableCell className="text-xs">{p.marca}</TableCell>
+                            <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
                             <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
                             <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
                             <TableCell className="text-xs">{p.conferente}</TableCell>
@@ -414,6 +423,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                           <TableHead>Código</TableHead>
                           <TableHead>Descrição</TableHead>
                           <TableHead>Marca</TableHead>
+                          <TableHead className="text-center">Unid.</TableHead>
                           <TableHead className="text-center">Previsto</TableHead>
                           <TableHead className="text-center">Conferido</TableHead>
                           <TableHead className="text-center">Diferença</TableHead>
@@ -430,6 +440,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                               <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
                               <TableCell className="text-xs max-w-[120px] truncate" title={p.descricao}>{p.descricao}</TableCell>
                               <TableCell className="text-xs">{p.marca}</TableCell>
+                              <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
                               <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
                               <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
                               <TableCell className="text-center font-medium">
