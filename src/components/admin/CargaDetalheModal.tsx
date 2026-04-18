@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, type ElementType } from 'react';
+import { useState, useEffect, useMemo, useCallback, type ElementType } from 'react';
 import {
   Package, Image, ShoppingBag, AlertTriangle, LayoutList,
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
   History, Unlock, Camera, CheckSquare, Flag,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -275,6 +276,39 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
     excedentes: produtosCruzados.filter(p => p.status === 'excedente').length,
   }), [produtosCruzados]);
 
+  type SortKey = keyof Pick<ProdutoCruzado,
+    'codigo' | 'descricao' | 'marca' | 'unidade' | 'qtdEsperada' | 'qtdConferida' | 'conferente' | 'status'
+  >;
+
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = useCallback((key: SortKey) => {
+    setSortKey(prev => {
+      if (prev === key) {
+        setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        return prev;
+      }
+      setSortDir('asc');
+      return key;
+    });
+  }, []);
+
+  const applySorting = useCallback(<T extends ProdutoCruzado>(arr: T[]): T[] => {
+    if (!sortKey) return arr;
+    return [...arr].sort((a, b) => {
+      const va = a[sortKey] ?? '';
+      const vb = b[sortKey] ?? '';
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), 'pt-BR', { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [sortKey, sortDir]);
+
+  const sortedProdutos  = useMemo(() => applySorting(produtosCruzados), [applySorting, produtosCruzados]);
+  const sortedPendentes = useMemo(() => applySorting(pendentes),        [applySorting, pendentes]);
+
   const erpInfo = useMemo(() => {
     if (!erpData || erpData.length === 0) return null;
     const primeiro = erpData[0];
@@ -298,6 +332,21 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
         <Icon className="h-3 w-3" />
         {cfg.label}
       </span>
+    );
+  };
+
+  const SortableHead = ({ label, col, className }: { label: string; col: SortKey; className?: string }) => {
+    const active = sortKey === col;
+    const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+    return (
+      <TableHead
+        className={cn('cursor-pointer select-none whitespace-nowrap hover:bg-muted/80', active && 'text-foreground', className)}
+        onClick={() => handleSort(col)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}<Icon className="h-3 w-3 shrink-0 opacity-60" />
+        </span>
+      </TableHead>
     );
   };
 
@@ -417,41 +466,43 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                 {produtosCruzados.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4">Nenhum produto registrado.</p>
                 ) : (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                        <TableRow>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Marca</TableHead>
-                          <TableHead className="text-center">Unid.</TableHead>
-                          <TableHead className="text-center">Previsto</TableHead>
-                          <TableHead className="text-center">Conferido</TableHead>
-                          <TableHead>Conferente</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {produtosCruzados.map(p => (
-                          <TableRow
-                            key={p.codigo}
-                            className={cn(
-                              p.status === 'pendente' && 'bg-amber-50/40',
-                              p.status === 'divergente' && 'bg-red-50/40',
-                            )}
-                          >
-                            <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
-                            <TableCell className="text-xs max-w-[140px] truncate" title={p.descricao}>{p.descricao}</TableCell>
-                            <TableCell className="text-xs">{p.marca}</TableCell>
-                            <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
-                            <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
-                            <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
-                            <TableCell className="text-xs">{p.conferente}</TableCell>
-                            <TableCell><StatusBadge status={p.status} /></TableCell>
+                  <div className="rounded-md border overflow-hidden">
+                    <div className="overflow-auto max-h-[calc(90vh-260px)]">
+                      <Table>
+                        <TableHeader className="bg-muted sticky top-0 z-10">
+                          <TableRow>
+                            <SortableHead label="Código"    col="codigo"        className="font-mono" />
+                            <SortableHead label="Descrição" col="descricao" />
+                            <SortableHead label="Marca"     col="marca" />
+                            <SortableHead label="Unid."     col="unidade"       className="text-center" />
+                            <SortableHead label="Previsto"  col="qtdEsperada"   className="text-center" />
+                            <SortableHead label="Conferido" col="qtdConferida"  className="text-center" />
+                            <SortableHead label="Conferente" col="conferente" />
+                            <SortableHead label="Status"    col="status" />
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedProdutos.map(p => (
+                            <TableRow
+                              key={p.codigo}
+                              className={cn(
+                                p.status === 'pendente'   && 'bg-amber-50/40',
+                                p.status === 'divergente' && 'bg-red-50/40',
+                              )}
+                            >
+                              <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
+                              <TableCell className="text-xs max-w-[140px] truncate" title={p.descricao}>{p.descricao}</TableCell>
+                              <TableCell className="text-xs">{p.marca}</TableCell>
+                              <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
+                              <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
+                              <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
+                              <TableCell className="text-xs">{p.conferente}</TableCell>
+                              <TableCell><StatusBadge status={p.status} /></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -465,46 +516,48 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                     <p className="text-sm text-muted-foreground">Todos os produtos foram conferidos corretamente.</p>
                   </div>
                 ) : (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                      <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                        <TableRow>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Descrição</TableHead>
-                          <TableHead>Marca</TableHead>
-                          <TableHead className="text-center">Unid.</TableHead>
-                          <TableHead className="text-center">Previsto</TableHead>
-                          <TableHead className="text-center">Conferido</TableHead>
-                          <TableHead className="text-center">Diferença</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {pendentes.map(p => {
-                          const diff = p.qtdConferida !== null && p.qtdEsperada !== null
-                            ? p.qtdConferida - p.qtdEsperada
-                            : null;
-                          return (
-                            <TableRow key={p.codigo}>
-                              <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
-                              <TableCell className="text-xs max-w-[120px] truncate" title={p.descricao}>{p.descricao}</TableCell>
-                              <TableCell className="text-xs">{p.marca}</TableCell>
-                              <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
-                              <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
-                              <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
-                              <TableCell className="text-center font-medium">
-                                {diff !== null ? (
-                                  <span className={cn(diff < 0 && 'text-red-600', diff > 0 && 'text-blue-600')}>
-                                    {diff > 0 ? `+${diff}` : diff}
-                                  </span>
-                                ) : '-'}
-                              </TableCell>
-                              <TableCell><StatusBadge status={p.status} /></TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
+                  <div className="rounded-md border overflow-hidden">
+                    <div className="overflow-auto max-h-[calc(90vh-260px)]">
+                      <Table>
+                        <TableHeader className="bg-muted sticky top-0 z-10">
+                          <TableRow>
+                            <SortableHead label="Código"    col="codigo"       className="font-mono" />
+                            <SortableHead label="Descrição" col="descricao" />
+                            <SortableHead label="Marca"     col="marca" />
+                            <SortableHead label="Unid."     col="unidade"      className="text-center" />
+                            <SortableHead label="Previsto"  col="qtdEsperada"  className="text-center" />
+                            <SortableHead label="Conferido" col="qtdConferida" className="text-center" />
+                            <TableHead className="text-center whitespace-nowrap">Diferença</TableHead>
+                            <SortableHead label="Status"    col="status" />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {sortedPendentes.map(p => {
+                            const diff = p.qtdConferida !== null && p.qtdEsperada !== null
+                              ? p.qtdConferida - p.qtdEsperada
+                              : null;
+                            return (
+                              <TableRow key={p.codigo}>
+                                <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
+                                <TableCell className="text-xs max-w-[120px] truncate" title={p.descricao}>{p.descricao}</TableCell>
+                                <TableCell className="text-xs">{p.marca}</TableCell>
+                                <TableCell className="text-center text-xs text-muted-foreground">{p.unidade}</TableCell>
+                                <TableCell className="text-center">{p.qtdEsperada ?? '-'}</TableCell>
+                                <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
+                                <TableCell className="text-center font-medium">
+                                  {diff !== null ? (
+                                    <span className={cn(diff < 0 && 'text-red-600', diff > 0 && 'text-blue-600')}>
+                                      {diff > 0 ? `+${diff}` : diff}
+                                    </span>
+                                  ) : '-'}
+                                </TableCell>
+                                <TableCell><StatusBadge status={p.status} /></TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </TabsContent>
