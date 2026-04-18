@@ -764,7 +764,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
 
     {lightbox && createPortal(
       <div
-        className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4"
+        className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4 pointer-events-auto"
         onClick={() => setLightbox(null)}
       >
         <div
