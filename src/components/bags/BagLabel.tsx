@@ -23,34 +23,46 @@ export function BagLabel({ cliente, pedidos, timestamp }: BagLabelProps) {
       id="bag-label-root"
       style={{
         fontFamily: 'Arial, sans-serif',
-        fontSize: '13px',
-        width: '80mm',
-        padding: '6mm',
+        fontSize: '9px',
+        width: '100mm',
+        height: '48mm',
+        padding: '3mm',
         boxSizing: 'border-box',
         background: '#fff',
         color: '#000',
+        display: 'flex',
+        flexDirection: 'row',
+        gap: '3mm',
+        overflow: 'hidden',
       }}
     >
-      <p style={{ fontWeight: 'bold', fontSize: '15px', marginBottom: '4px' }}>
-        {cliente.codparc} - {cliente.nomeparc}
-      </p>
-      <p style={{ marginBottom: '2px' }}>
-        <strong>Razão Social:</strong> {cliente.razaosocial}
-      </p>
-      <p style={{ marginBottom: '2px' }}>
-        <strong>Cidade/UF:</strong> {cliente.nomecid}/{cliente.uf}
-      </p>
-      <p style={{ marginBottom: '2px' }}>
-        <strong>Endereço:</strong> {cliente.nomeend}
-      </p>
-      <p style={{ marginBottom: '6px' }}>
-        <strong>Número</strong> {cliente.numend} <strong>Bairro</strong> {cliente.nomebai}
-      </p>
-      <p style={{ marginBottom: '8px' }}>
-        <strong>Nro. Único:</strong> {pedidos.join(', ')}
-      </p>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <QRCode value={timestamp} size={96} />
+      {/* Left: text info */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0 }}>
+        <div>
+          <p style={{ fontWeight: 'bold', fontSize: '10px', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {cliente.codparc} - {cliente.nomeparc}
+          </p>
+          <p style={{ marginBottom: '1px' }}>
+            <strong>Razão Social:</strong> {cliente.razaosocial}
+          </p>
+          <p style={{ marginBottom: '1px' }}>
+            <strong>Cidade/UF:</strong> {cliente.nomecid}/{cliente.uf}
+          </p>
+          <p style={{ marginBottom: '1px' }}>
+            <strong>End.:</strong> {cliente.nomeend}, {cliente.numend}
+          </p>
+          <p style={{ marginBottom: '1px' }}>
+            <strong>Bairro:</strong> {cliente.nomebai}
+          </p>
+        </div>
+        <p style={{ marginTop: '2px' }}>
+          <strong>Nro. Único:</strong> {pedidos.join(', ')}
+        </p>
+      </div>
+
+      {/* Right: QR code */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <QRCode value={timestamp} size={116} />
       </div>
     </div>
   );
