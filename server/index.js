@@ -493,6 +493,7 @@ app.get('/admin/cargas/:id/historico', async (req, res) => {
 // Buscar dados do cliente para etiqueta da sacola
 app.post('/sacolas/etiqueta-cliente', async (req, res) => {
   const { pedido } = req.body;
+  console.log('etiqueta-cliente recebeu pedido:', pedido, typeof pedido);
   if (!pedido) return res.status(400).json({ error: 'pedido é obrigatório' });
 
   try {
