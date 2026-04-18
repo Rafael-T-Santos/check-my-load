@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, type ElementType } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Package, Image, ShoppingBag, AlertTriangle, LayoutList,
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
@@ -761,7 +762,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
 
     </Dialog>
 
-    {lightbox && (
+    {lightbox && createPortal(
       <div
         className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4"
         onClick={() => setLightbox(null)}
@@ -803,7 +804,8 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
             className="max-h-[80vh] w-full object-contain rounded-lg"
           />
         </div>
-      </div>
+      </div>,
+      document.body
     )}
     </>
   );
