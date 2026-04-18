@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, type ChangeEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft, Camera, Check, Trash2, QrCode, Keyboard, Package, ShoppingBag, Maximize2, AlertCircle, Printer } from 'lucide-react';
@@ -87,21 +87,53 @@ export function BagRegistrationModal({
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Etiqueta ${timestamp}</title>
   <style>
     @page { size: 100mm 48mm; margin: 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { width: 100mm; height: 48mm; overflow: hidden; background: #fff; }
+    body {
+      background: #e5e7eb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+    }
+    #label-preview {
+      background: #fff;
+      border: 1px solid #d1d5db;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    #print-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 14px 40px;
+      font-size: 17px;
+      font-weight: bold;
+      border-radius: 10px;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+    }
+    #print-btn:active { background: #1d4ed8; }
+    @media print {
+      body { background: #fff; padding: 0; min-height: unset; justify-content: flex-start; gap: 0; }
+      #label-preview { border: none; box-shadow: none; }
+      #print-btn { display: none; }
+    }
   </style>
 </head>
-<body>${labelHtml}</body>
+<body>
+  <div id="label-preview">${labelHtml}</div>
+  <button id="print-btn" onclick="window.print()">Imprimir</button>
+</body>
 </html>`);
         win.document.close();
         win.focus();
-
-        setTimeout(() => {
-          win.print();
-          win.close();
-        }, 250);
       }, 300);
 
       toast.success('Etiqueta enviada para impressão!', {
@@ -144,7 +176,7 @@ export function BagRegistrationModal({
     setIsScannerActive(false);
   };
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoCapture = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
