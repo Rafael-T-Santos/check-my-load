@@ -502,10 +502,15 @@ app.post('/sacolas/etiqueta-cliente', async (req, res) => {
       body: JSON.stringify({ numnota: Number(pedido) }),
     });
 
-    if (!erpRes.ok) return res.status(502).json({ error: 'Erro ao consultar ERP' });
+    if (!erpRes.ok) {
+      const errBody = await erpRes.text();
+      console.error(`ERP /consultar-cliente retornou ${erpRes.status}:`, errBody);
+      return res.status(502).json({ error: 'Erro ao consultar ERP', status: erpRes.status, detail: errBody });
+    }
 
     const data = await erpRes.json();
-    if (!data.sucesso) return res.status(404).json({ error: 'Cliente não encontrado' });
+    console.log('ERP /consultar-cliente resposta:', JSON.stringify(data));
+    if (!data.sucesso) return res.status(404).json({ error: 'Cliente não encontrado', erp: data });
 
     res.json(data.dados);
   } catch (err) {
