@@ -371,6 +371,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden p-0">
 
@@ -758,53 +759,53 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
         )}
       </DialogContent>
 
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
-          onClick={() => setLightbox(null)}
-        >
-          <div
-            className="relative max-w-4xl w-full flex flex-col gap-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="text-white space-y-0.5 min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {lightbox.observacao || 'Sem observação'}
-                </p>
-                {lightbox.conferente && (
-                  <p className="text-xs text-white/60">{lightbox.conferente} · {lightbox.data}</p>
-                )}
-                {!lightbox.conferente && (
-                  <p className="text-xs text-white/60">{lightbox.data}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  onClick={() => handleDownload(lightbox.src, `foto-carga-${carga.id}-${Date.now()}.jpg`)}
-                  title="Baixar foto"
-                >
-                  <Download className="h-4 w-4" />
-                </button>
-                <button
-                  className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  onClick={() => setLightbox(null)}
-                  title="Fechar"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <img
-              src={lightbox.src.startsWith('data:') ? lightbox.src : `data:image/jpeg;base64,${lightbox.src}`}
-              alt={lightbox.observacao || 'Foto'}
-              className="max-h-[80vh] w-full object-contain rounded-lg"
-            />
-          </div>
-        </div>
-      )}
     </Dialog>
+
+    {lightbox && (
+      <div
+        className="fixed inset-0 z-[200] bg-black/85 flex items-center justify-center p-4"
+        onClick={() => setLightbox(null)}
+      >
+        <div
+          className="relative max-w-4xl w-full flex flex-col gap-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-white space-y-0.5 min-w-0">
+              <p className="text-sm font-medium truncate">
+                {lightbox.observacao || 'Sem observação'}
+              </p>
+              {lightbox.conferente
+                ? <p className="text-xs text-white/60">{lightbox.conferente} · {lightbox.data}</p>
+                : <p className="text-xs text-white/60">{lightbox.data}</p>
+              }
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                onClick={() => handleDownload(lightbox.src, `foto-carga-${carga.id}-${Date.now()}.jpg`)}
+                title="Baixar foto"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+              <button
+                className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                onClick={() => setLightbox(null)}
+                title="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <img
+            src={lightbox.src.startsWith('data:') ? lightbox.src : `data:image/jpeg;base64,${lightbox.src}`}
+            alt={lightbox.observacao || 'Foto'}
+            className="max-h-[80vh] w-full object-contain rounded-lg"
+          />
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 
