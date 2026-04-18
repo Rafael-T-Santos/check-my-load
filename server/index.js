@@ -490,5 +490,29 @@ app.get('/admin/cargas/:id/historico', async (req, res) => {
   }
 });
 
+// Buscar dados do cliente para etiqueta da sacola
+app.post('/sacolas/etiqueta-cliente', async (req, res) => {
+  const { pedido } = req.body;
+  if (!pedido) return res.status(400).json({ error: 'pedido é obrigatório' });
+
+  try {
+    const erpRes = await fetch('http://192.168.255.6:5000/api/consultar-cliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numnota: Number(pedido) }),
+    });
+
+    if (!erpRes.ok) return res.status(502).json({ error: 'Erro ao consultar ERP' });
+
+    const data = await erpRes.json();
+    if (!data.sucesso) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+    res.json(data.dados);
+  } catch (err) {
+    console.error('Erro ao buscar cliente para etiqueta:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`🚀 Backend rodando na porta ${PORT}`));

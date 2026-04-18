@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ChevronLeft, Camera, Check, Trash2, QrCode, Keyboard, Package, ShoppingBag, Maximize2, AlertCircle } from 'lucide-react';
+import { X, ChevronLeft, Camera, Check, Trash2, QrCode, Keyboard, Package, ShoppingBag, Maximize2, AlertCircle, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { PhotoRecord, BagProduct } from '@/types/cargo';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
+import { BagLabel, type ClienteData } from './BagLabel';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
 
@@ -35,9 +37,64 @@ export function BagRegistrationModal({
   const [photos, setPhotos] = useState<PhotoRecord[]>([]);
   const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isPrintLoading, setIsPrintLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handlePrintLabel = async () => {
+    if (!selectedOrders.length) return;
+    setIsPrintLoading(true);
+    try {
+      const res = await fetch('http://192.168.255.6:3000/sacolas/etiqueta-cliente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pedido: selectedOrders[0] }),
+      });
+      if (!res.ok) throw new Error();
+      const cliente: ClienteData = await res.json();
+
+      const timestamp = Date.now().toString();
+      setBagCode(timestamp);
+
+      const container = document.createElement('div');
+      container.id = 'bag-label-print';
+      document.body.appendChild(container);
+
+      const style = document.createElement('style');
+      style.id = 'bag-label-style';
+      style.textContent = `
+        #bag-label-print { display: none; }
+        @media print {
+          body > *:not(#bag-label-print) { display: none !important; }
+          #bag-label-print { display: block !important; }
+        }
+      `;
+      document.head.appendChild(style);
+
+      const root = createRoot(container);
+      root.render(
+        <BagLabel cliente={cliente} pedidos={selectedOrders} timestamp={timestamp} />
+      );
+
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          root.unmount();
+          document.body.removeChild(container);
+          document.head.removeChild(style);
+        }, 500);
+      }, 300);
+
+      toast.success('Etiqueta enviada para impressão!', {
+        description: `Código: ${timestamp}`,
+      });
+    } catch {
+      toast.error('Erro ao gerar etiqueta. Verifique a conexão com o ERP.');
+    } finally {
+      setIsPrintLoading(false);
+    }
+  };
 
   const validateBagCode = (code: string): boolean => {
     if (!code.trim()) {
@@ -177,6 +234,23 @@ export function BagRegistrationModal({
                 {codeValidated && <Check className="w-4 h-4 text-success" />}
               </h3>
               
+              {/* Print label button — always visible before code validation */}
+              <Button
+                variant="outline"
+                onClick={handlePrintLabel}
+                disabled={isPrintLoading}
+                className="w-full"
+              >
+                {isPrintLoading ? (
+                  <span className="animate-pulse">Gerando etiqueta...</span>
+                ) : (
+                  <>
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimir Etiqueta
+                  </>
+                )}
+              </Button>
+
               {!codeValidated ? (
                 <>
                   <BarcodeScanner
