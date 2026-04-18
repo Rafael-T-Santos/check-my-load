@@ -44,6 +44,15 @@ export function BagRegistrationModal({
 
   const handlePrintLabel = async () => {
     if (!selectedOrders.length) return;
+
+    // Abre a janela antes do fetch para evitar bloqueio de popup
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast.error('Popup bloqueado. Permita popups neste navegador para imprimir.');
+      return;
+    }
+    win.document.write('<html><body style="font-family:Arial;padding:8px">Gerando etiqueta...</body></html>');
+
     setIsPrintLoading(true);
     try {
       const res = await fetch('http://192.168.255.6:3000/sacolas/etiqueta-cliente', {
@@ -57,39 +66,49 @@ export function BagRegistrationModal({
       const timestamp = Date.now().toString();
       setBagCode(timestamp);
 
+      // Renderiza o componente numa div oculta para capturar o SVG do QR code
       const container = document.createElement('div');
-      container.id = 'bag-label-print';
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
       document.body.appendChild(container);
-
-      const style = document.createElement('style');
-      style.id = 'bag-label-style';
-      style.textContent = `
-        #bag-label-print { display: none; }
-        @media print {
-          body > *:not(#bag-label-print) { display: none !important; }
-          #bag-label-print { display: block !important; }
-        }
-      `;
-      document.head.appendChild(style);
-
       const root = createRoot(container);
       root.render(
         <BagLabel cliente={cliente} pedidos={selectedOrders} timestamp={timestamp} />
       );
 
+      // Aguarda o React renderizar o SVG do QR code
       setTimeout(() => {
-        window.print();
+        const labelHtml = container.innerHTML;
+        root.unmount();
+        document.body.removeChild(container);
+
+        win.document.open();
+        win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @page { size: 100mm 48mm; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { width: 100mm; height: 48mm; overflow: hidden; background: #fff; }
+  </style>
+</head>
+<body>${labelHtml}</body>
+</html>`);
+        win.document.close();
+        win.focus();
+
         setTimeout(() => {
-          root.unmount();
-          document.body.removeChild(container);
-          document.head.removeChild(style);
-        }, 500);
+          win.print();
+          win.close();
+        }, 250);
       }, 300);
 
       toast.success('Etiqueta enviada para impressão!', {
         description: `Código: ${timestamp}`,
       });
     } catch {
+      win.close();
       toast.error('Erro ao gerar etiqueta. Verifique a conexão com o ERP.');
     } finally {
       setIsPrintLoading(false);
