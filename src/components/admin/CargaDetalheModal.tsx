@@ -4,6 +4,7 @@ import {
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
   History, Unlock, Camera, CheckSquare, Flag,
   ArrowUpDown, ArrowUp, ArrowDown,
+  Download, ZoomIn, X,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -86,6 +87,13 @@ interface ProdutoCruzado {
   status: StatusConferencia;
 }
 
+interface LightboxFoto {
+  src: string;
+  observacao: string;
+  conferente?: string;
+  data: string;
+}
+
 interface HistoricoAcao {
   id: number;
   acao: string;
@@ -128,6 +136,7 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
   const [sacolas, setSacolas] = useState<SacolaDB[] | null>(null);
   const [erpData, setErpData] = useState<ErpItem[] | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcao[]>([]);
+  const [lightbox, setLightbox] = useState<LightboxFoto | null>(null);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
@@ -321,6 +330,15 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
 
   const isLoading = loadingLocal || loadingERP;
   const formatarData = (d: string) => d ? new Date(d).toLocaleString('pt-BR') : '-';
+
+  const handleDownload = useCallback((src: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = src.startsWith('data:') ? src : `data:image/jpeg;base64,${src}`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
 
   // ─── Render helpers ───────────────────────────────────────────────────────
 
@@ -614,11 +632,15 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                               {sacola.photos.map(foto => (
                                 <div key={foto.id} className="border rounded-lg overflow-hidden">
-                                  <img
-                                    src={foto.imageData}
-                                    alt="Foto da sacola"
-                                    className="w-full h-36 object-cover"
-                                  />
+                                  <div
+                                    className="relative group cursor-pointer"
+                                    onClick={() => setLightbox({ src: foto.imageData, observacao: foto.observation || '', data: formatarData(foto.capturedAt) })}
+                                  >
+                                    <img src={foto.imageData} alt="Foto da sacola" className="w-full h-36 object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ZoomIn className="h-8 w-8 text-white" />
+                                    </div>
+                                  </div>
                                   <div className="p-2 space-y-1">
                                     <p className="text-xs text-muted-foreground break-words line-clamp-2">
                                       {foto.observation || 'Sem observação'}
@@ -644,11 +666,15 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {localData.fotos.map(foto => (
                       <div key={foto.id} className="border rounded-lg overflow-hidden">
-                        <img
-                          src={foto.imagem_base64}
-                          alt="Evidência"
-                          className="w-full h-36 object-cover"
-                        />
+                        <div
+                          className="relative group cursor-pointer"
+                          onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                        >
+                          <img src={foto.imagem_base64} alt="Evidência" className="w-full h-36 object-cover" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <ZoomIn className="h-8 w-8 text-white" />
+                          </div>
+                        </div>
                         <div className="p-2 space-y-1">
                           <p className="text-xs text-muted-foreground break-words line-clamp-2">
                             {foto.observacao || 'Sem observação'}
@@ -731,6 +757,53 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
           </Tabs>
         )}
       </DialogContent>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full flex flex-col gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="text-white space-y-0.5 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {lightbox.observacao || 'Sem observação'}
+                </p>
+                {lightbox.conferente && (
+                  <p className="text-xs text-white/60">{lightbox.conferente} · {lightbox.data}</p>
+                )}
+                {!lightbox.conferente && (
+                  <p className="text-xs text-white/60">{lightbox.data}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  onClick={() => handleDownload(lightbox.src, `foto-carga-${carga.id}-${Date.now()}.jpg`)}
+                  title="Baixar foto"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  onClick={() => setLightbox(null)}
+                  title="Fechar"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <img
+              src={lightbox.src.startsWith('data:') ? lightbox.src : `data:image/jpeg;base64,${lightbox.src}`}
+              alt={lightbox.observacao || 'Foto'}
+              className="max-h-[80vh] w-full object-contain rounded-lg"
+            />
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };
