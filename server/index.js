@@ -72,25 +72,34 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
     const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.produto_codigo, r.quantidade_conferida]));
 
     for (const prod of produtos) {
+      const qtdAnterior = qtdAnteriorMap.get(prod.codigo) ?? null;
+      const qtdMudou = qtdAnterior === null || qtdAnterior !== Number(prod.quantidade);
+
       await pool.query(
         `INSERT INTO conferencias_produtos (carga_id, produto_codigo, quantidade_conferida, conferido_por_usuario_id, marca)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (carga_id, produto_codigo)
          DO UPDATE SET quantidade_conferida = EXCLUDED.quantidade_conferida,
-                       conferido_por_usuario_id = EXCLUDED.conferido_por_usuario_id,
+                       conferido_por_usuario_id = CASE
+                         WHEN conferencias_produtos.quantidade_conferida != EXCLUDED.quantidade_conferida
+                         THEN EXCLUDED.conferido_por_usuario_id
+                         ELSE conferencias_produtos.conferido_por_usuario_id
+                       END,
                        atualizado_em = CURRENT_TIMESTAMP`,
         [id, prod.codigo, prod.quantidade, uid, prod.marca]
       );
 
-      await pool.query(
-        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-        [id, uid, 'produto_conferido', JSON.stringify({
-          produto_codigo: prod.codigo,
-          marca: prod.marca,
-          qtd_anterior: qtdAnteriorMap.get(prod.codigo) ?? null,
-          qtd_nova: prod.quantidade
-        })]
-      );
+      if (qtdMudou) {
+        await pool.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+          [id, uid, 'produto_conferido', JSON.stringify({
+            produto_codigo: prod.codigo,
+            marca: prod.marca,
+            qtd_anterior: qtdAnterior,
+            qtd_nova: prod.quantidade
+          })]
+        );
+      }
     }
 
     if (cargaNova) {
