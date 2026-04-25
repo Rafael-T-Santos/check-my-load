@@ -23,7 +23,7 @@ export function BagLabel({ cliente, pedidos, timestamp }: BagLabelProps) {
       id="bag-label-root"
       style={{
         fontFamily: 'Arial, sans-serif',
-        fontSize: '9px',
+        fontSize: '11px',
         width: '100mm',
         height: '48mm',
         padding: '3mm',
@@ -39,19 +39,19 @@ export function BagLabel({ cliente, pedidos, timestamp }: BagLabelProps) {
       {/* Left: text info */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0 }}>
         <div>
-          <p style={{ fontWeight: 'bold', fontSize: '10px', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{ fontWeight: 'bold', fontSize: '13px', marginBottom: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {cliente.codparc} - {cliente.nomeparc}
           </p>
-          <p style={{ marginBottom: '1px' }}>
+          <p style={{ marginBottom: '2px' }}>
             <strong>Razão Social:</strong> {cliente.razaosocial}
           </p>
-          <p style={{ marginBottom: '1px' }}>
+          <p style={{ marginBottom: '2px' }}>
             <strong>Cidade/UF:</strong> {cliente.nomecid}/{cliente.uf}
           </p>
-          <p style={{ marginBottom: '1px' }}>
+          <p style={{ marginBottom: '2px' }}>
             <strong>End.:</strong> {cliente.nomeend}, {cliente.numend}
           </p>
-          <p style={{ marginBottom: '1px' }}>
+          <p style={{ marginBottom: '2px' }}>
             <strong>Bairro:</strong> {cliente.nomebai}
           </p>
         </div>
@@ -60,9 +60,10 @@ export function BagLabel({ cliente, pedidos, timestamp }: BagLabelProps) {
         </p>
       </div>
 
-      {/* Right: QR code */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <QRCode value={timestamp} size={116} />
+      {/* Right: QR code + timestamp */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, gap: '2px' }}>
+        <QRCode value={timestamp} size={100} />
+        <span style={{ fontSize: '8px', textAlign: 'center', whiteSpace: 'nowrap' }}>{timestamp}</span>
       </div>
     </div>
   );
