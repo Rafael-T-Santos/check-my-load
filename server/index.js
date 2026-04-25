@@ -58,7 +58,8 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+                                      atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
     );
@@ -129,7 +130,8 @@ app.post('/cargas/:id/fotos', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+                                      atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
     );
@@ -280,7 +282,8 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa)
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+                                      atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
     );
