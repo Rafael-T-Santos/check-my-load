@@ -50,7 +50,16 @@ export function OrderSelectionModal({
     return acc;
   }, {} as Record<string, typeof orders>);
 
-  // 2. Validação para avançar
+  // 2. Cliente do(s) pedido(s) já selecionado(s) — bloqueia outros clientes
+  const selectedCustomer = selectedOrders.length > 0
+    ? (orders.find(o => o.orderId === selectedOrders[0])?.customerName ?? null)
+    : null;
+
+  const isLockedByCustomer = (order: OrderInfo) =>
+    selectedCustomer !== null &&
+    (order.customerName || 'CLIENTE NÃO INFORMADO') !== selectedCustomer;
+
+  // 3. Validação para avançar
   const canProceed = selectedOrders.length > 0;
 
   return (
@@ -114,30 +123,31 @@ export function OrderSelectionModal({
                 {customerOrders.map(order => {
                   const availability = getOrderAvailability(order.orderId);
                   const isSelected = selectedOrders.includes(order.orderId);
-                  
-                  // Status visual do pedido
+                  const lockedByCustomer = isLockedByCustomer(order);
+
                   const isFullyBagged = availability.allInBags;
                   const hasItemsAvailable = availability.hasAvailable;
+                  const isDisabled = !hasItemsAvailable || lockedByCustomer;
 
                   return (
                     <div
                       key={order.orderId}
                       onClick={() => {
-                        if (hasItemsAvailable) {
-                          handleToggleOrder(order.orderId); // Corrigido aqui
+                        if (!isDisabled) {
+                          handleToggleOrder(order.orderId);
                         }
                       }}
                       className={`
-                        p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-4
+                        p-4 rounded-xl border-2 transition-all flex items-center gap-4
                         ${isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card'}
-                        ${!hasItemsAvailable ? 'opacity-50 cursor-not-allowed bg-muted' : 'hover:border-primary/50'}
+                        ${isDisabled ? 'opacity-40 cursor-not-allowed bg-muted' : 'cursor-pointer hover:border-primary/50'}
                       `}
                     >
                       {/* Checkbox visual */}
                       <div className={`
                         w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0
                         ${isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground'}
-                        ${!hasItemsAvailable ? 'bg-muted border-muted-foreground/30' : ''}
+                        ${isDisabled ? 'bg-muted border-muted-foreground/30' : ''}
                       `}>
                         {isSelected && <Check className="w-4 h-4" />}
                       </div>
@@ -148,6 +158,11 @@ export function OrderSelectionModal({
                           {isFullyBagged && (
                             <Badge variant="outline" className="bg-success/10 text-success border-success/20 shrink-0">
                               100% na Sacola
+                            </Badge>
+                          )}
+                          {lockedByCustomer && (
+                            <Badge variant="outline" className="bg-muted text-muted-foreground border-muted-foreground/20 shrink-0">
+                              Outro cliente
                             </Badge>
                           )}
                         </div>
