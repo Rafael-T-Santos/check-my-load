@@ -418,20 +418,42 @@ export function useCargoProgress() {
   }, []);
 
   // Bag management functions
-  const getProductAvailability = useCallback((productCode: string): { total: number; inBags: number; available: number } => {
+  const getProductAvailability = useCallback((
+    productCode: string,
+    selectedOrders?: string[]
+  ): { total: number; inBags: number; available: number } => {
     const product = products.find(p => p.code === productCode);
     if (!product) return { total: 0, inBags: 0, available: 0 };
 
-    const checkedQty = product.checkedQuantity ?? 0;
-    const inBags = bags.reduce((sum, bag) => {
-      const bagProduct = bag.products.find(bp => bp.code === productCode);
-      return sum + (bagProduct?.quantity ?? 0);
-    }, 0);
+    let total: number;
+    let inBags: number;
+
+    if (selectedOrders && selectedOrders.length > 0) {
+      // Limita ao somatório dos pedidos selecionados (ignora outros pedidos)
+      total = product.orders
+        .filter(o => selectedOrders.includes(o.orderId))
+        .reduce((sum, o) => sum + o.quantity, 0);
+
+      // Conta apenas unidades já ensacadas que vieram dos pedidos selecionados
+      inBags = bags.reduce((sum, bag) => {
+        const bagProduct = bag.products.find(bp => bp.code === productCode);
+        if (!bagProduct) return sum;
+        const fromSelectedOrder = bagProduct.ordersOrigin.some(o => selectedOrders.includes(o));
+        return fromSelectedOrder ? sum + bagProduct.quantity : sum;
+      }, 0);
+    } else {
+      // Comportamento original: usa a quantidade verificada global
+      total = product.checkedQuantity ?? 0;
+      inBags = bags.reduce((sum, bag) => {
+        const bagProduct = bag.products.find(bp => bp.code === productCode);
+        return sum + (bagProduct?.quantity ?? 0);
+      }, 0);
+    }
 
     return {
-      total: checkedQty,
+      total,
       inBags,
-      available: Math.max(0, checkedQty - inBags),
+      available: Math.max(0, total - inBags),
     };
   }, [products, bags]);
 

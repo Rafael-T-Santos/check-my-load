@@ -12,15 +12,17 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       '/api-local': {
-        target: 'http://backend:3000',
+        target: 'http://192.168.255.6:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-local/, '')
       }
     }
   },
   plugins: [
-    react(), 
-    basicSsl()
+    react(),
+    // HTTPS só no build de produção (Docker/nginx). Em dev local o localhost
+    // já tem permissão de câmera via HTTP e evita erro de mixed-content com a API.
+    ...(mode !== 'development' ? [basicSsl()] : []),
   ],
   resolve: {
     alias: {

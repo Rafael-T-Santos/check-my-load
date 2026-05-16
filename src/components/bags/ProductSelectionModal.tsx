@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Package, ChevronRight, ChevronLeft, Minus, Plus, ShoppingBag } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Minus, Plus, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Product, Bag } from '@/types/cargo';
@@ -12,7 +12,7 @@ interface ProductSelectionModalProps {
   selectedOrders: string[];
   products: Product[];
   bags: Bag[];
-  getProductAvailability: (code: string) => { total: number; inBags: number; available: number };
+  getProductAvailability: (code: string, selectedOrders?: string[]) => { total: number; inBags: number; available: number };
   onConfirmProducts: (products: { code: string; description: string; quantity: number; ordersOrigin: string[] }[]) => void;
 }
 
@@ -49,7 +49,7 @@ export function ProductSelectionModal({
   if (!isOpen) return null;
 
   const handleToggleProduct = (product: Product) => {
-    const availability = getProductAvailability(product.code);
+    const availability = getProductAvailability(product.code, selectedOrders);
     if (availability.available === 0) return;
 
     setSelectedProducts(prev => {
@@ -153,7 +153,7 @@ export function ProductSelectionModal({
         {/* Product List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {orderProducts.map((product) => {
-            const availability = getProductAvailability(product.code);
+            const availability = getProductAvailability(product.code, selectedOrders);
             const isDisabled = availability.available === 0;
             const isSelected = selectedProducts.has(product.code);
             const selectedData = selectedProducts.get(product.code);
