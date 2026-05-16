@@ -122,7 +122,7 @@ export function useCargoProgress() {
 
   const saveProgress = useCallback(() => {
     if (!currentCargo) return;
-    
+
     const progress: CargoProgress = {
       cargoId: currentCargo.id,
       products: products.reduce((acc, p) => {
@@ -132,17 +132,35 @@ export function useCargoProgress() {
         };
         return acc;
       }, {} as CargoProgress['products']),
-      photos,
+      photos: [], // Fotos são gerenciadas pelo backend, não salvar no localStorage
       bags,
-      currentStep: currentStep === 'search' ? 'brand-selection' : 
-                   currentStep === 'bags' ? 'brand-selection' : 
+      currentStep: currentStep === 'search' ? 'brand-selection' :
+                   currentStep === 'bags' ? 'brand-selection' :
                    currentStep as CargoProgress['currentStep'],
       lastUpdated: new Date().toISOString(),
       actionHistory: [],
     };
-    
-    localStorage.setItem(`${STORAGE_KEY}-${currentCargo.id}`, JSON.stringify(progress));
-  }, [currentCargo, products, photos, bags, currentStep]);
+
+    try {
+      localStorage.setItem(`${STORAGE_KEY}-${currentCargo.id}`, JSON.stringify(progress));
+    } catch (e) {
+      console.warn('localStorage cheio, limpando entradas antigas de progresso...', e);
+      // Remove entradas antigas de outras cargas para liberar espaço
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(STORAGE_KEY) && key !== `${STORAGE_KEY}-${currentCargo.id}`) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      try {
+        localStorage.setItem(`${STORAGE_KEY}-${currentCargo.id}`, JSON.stringify(progress));
+      } catch {
+        console.error('localStorage ainda cheio após limpeza. Progresso não salvo localmente.');
+      }
+    }
+  }, [currentCargo, products, bags, currentStep]);
 
   const searchCargo = useCallback(async (cargoId: string, continueProgress = false): Promise<Cargo | null> => {
     try {
