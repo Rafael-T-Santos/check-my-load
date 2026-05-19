@@ -176,6 +176,9 @@ const AdminCargas = () => {
         <CargaDetalheModal
           carga={selectedCarga}
           onClose={() => setSelectedCargaId(null)}
+          onStatusChange={(id, newStatus) => {
+            setCargas(prev => prev.map(c => c.id === id ? { ...c, status: newStatus } : c));
+          }}
         />
       )}
     </div>

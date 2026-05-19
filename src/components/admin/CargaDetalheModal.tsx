@@ -5,13 +5,19 @@ import {
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
   History, Unlock, Camera, CheckSquare, Flag,
   ArrowUpDown, ArrowUp, ArrowDown,
-  Download, ZoomIn, X,
+  Download, ZoomIn, X, CheckCheck,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -130,10 +136,15 @@ const STATUS_ORDER: StatusConferencia[] = ['pendente', 'divergente', 'excedente'
 interface Props {
   carga: CargaInfo;
   onClose: () => void;
+  onStatusChange?: (id: string, newStatus: string) => void;
 }
 
-const CargaDetalheModal = ({ carga, onClose }: Props) => {
+const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const [localData, setLocalData] = useState<{ produtos: ProdutoDB[]; fotos: FotoDB[] } | null>(null);
+  const [cargaStatus, setCargaStatus] = useState(carga.status);
+  const [finalizando, setFinalizando] = useState(false);
+  const [showConfirmFinalizar, setShowConfirmFinalizar] = useState(false);
+  const [motivoAdmin, setMotivoAdmin] = useState('');
   const [sacolas, setSacolas] = useState<SacolaDB[] | null>(null);
   const [erpData, setErpData] = useState<ErpItem[] | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcao[]>([]);
@@ -141,6 +152,27 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
+
+  const handleFinalizar = useCallback(async () => {
+    setFinalizando(true);
+    try {
+      const res = await fetch(`http://192.168.255.6:3000/cargas/${carga.id}/finalizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: 1, via_admin: true, motivo_admin: motivoAdmin.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      setCargaStatus('finalizada');
+      setShowConfirmFinalizar(false);
+      setMotivoAdmin('');
+      onStatusChange?.(carga.id, 'finalizada');
+      toast.success(`Carga #${carga.id} finalizada pelo painel administrativo.`);
+    } catch {
+      toast.error('Erro ao finalizar carga. Tente novamente.');
+    } finally {
+      setFinalizando(false);
+    }
+  }, [carga.id, motivoAdmin, onStatusChange]);
 
   useEffect(() => {
     const fetchLocal = async () => {
@@ -276,7 +308,8 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
     return result.sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
   }, [localData, erpData]);
 
-  const pendentes = produtosCruzados.filter(p => p.status !== 'conferido');
+  // sem_previsao = produto conferido mas removido/cancelado no ERP — não é pendência do operador
+  const pendentes = produtosCruzados.filter(p => p.status !== 'conferido' && p.status !== 'sem_previsao');
 
   const resumeStats = useMemo(() => ({
     total: produtosCruzados.length,
@@ -381,11 +414,20 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
           <DialogTitle className="text-xl flex items-center gap-2 flex-wrap">
             Carga #{carga.id}
             <Badge
-              variant={carga.status === 'finalizada' ? 'default' : 'secondary'}
-              className={cn(carga.status === 'finalizada' && 'bg-emerald-500')}
+              variant={cargaStatus === 'finalizada' ? 'default' : 'secondary'}
+              className={cn(cargaStatus === 'finalizada' && 'bg-emerald-500')}
             >
-              {carga.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
+              {cargaStatus === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
             </Badge>
+            {cargaStatus !== 'finalizada' && (
+              <button
+                onClick={() => setShowConfirmFinalizar(true)}
+                className="ml-auto flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+              >
+                <CheckCheck className="h-4 w-4" />
+                Finalizar Carga
+              </button>
+            )}
           </DialogTitle>
           <DialogDescription className="flex flex-wrap gap-4 text-xs mt-1">
             {carga.placa && <span>Placa: <strong className="text-foreground">{carga.placa}</strong></span>}
@@ -726,6 +768,15 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
                               </time>
                             </div>
 
+                            {item.acao === 'carga_finalizada' && det.via_admin && (
+                              <div className="flex items-start gap-1.5 mt-1 text-xs bg-amber-50 border border-amber-200 rounded px-2 py-1 text-amber-800">
+                                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                                <span>
+                                  Finalizado pelo painel administrativo
+                                  {det.motivo ? ` — ${String(det.motivo)}` : ''}
+                                </span>
+                              </div>
+                            )}
                             {item.acao === 'produto_conferido' && (
                               <p className="text-xs text-muted-foreground">
                                 Cód. {String(det.produto_codigo)}
@@ -761,6 +812,58 @@ const CargaDetalheModal = ({ carga, onClose }: Props) => {
       </DialogContent>
 
     </Dialog>
+
+    <AlertDialog open={showConfirmFinalizar} onOpenChange={setShowConfirmFinalizar}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            Atenção antes de finalizar
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-3 text-sm">
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-3 space-y-1 text-amber-800">
+                <p className="font-semibold">O procedimento correto é outro:</p>
+                <p>O operador deve abrir o app de conferência, concluir o fluxo normalmente e tirar as fotos antes de finalizar. Isso garante o registro completo da conferência.</p>
+              </div>
+              <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800">
+                <p className="font-semibold">Ao finalizar por aqui:</p>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>A carga será marcada como concluída <strong>sem fotos</strong></li>
+                  <li>Ficará registrado no histórico que foi o <strong>painel admin</strong> que finalizou</li>
+                </ul>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-foreground">
+                  Motivo da finalização pelo admin <span className="text-muted-foreground">(obrigatório)</span>
+                </label>
+                <Textarea
+                  placeholder="Ex: Item cancelado no Sankhya após acerto com o cliente, operador sem acesso ao app..."
+                  value={motivoAdmin}
+                  onChange={e => setMotivoAdmin(e.target.value)}
+                  rows={3}
+                  className="text-sm resize-none"
+                />
+              </div>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => { setShowConfirmFinalizar(false); setMotivoAdmin(''); }}>
+            Cancelar — vou avisar o operador
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleFinalizar}
+            disabled={finalizando || motivoAdmin.trim().length < 10}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {finalizando
+              ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Finalizando...</>
+              : 'Confirmar finalização'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     {lightbox && createPortal(
       <div

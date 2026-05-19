@@ -175,8 +175,12 @@ app.post('/cargas/:id/fotos', async (req, res) => {
 // 4. Finalizar a Carga
 app.post('/cargas/:id/finalizar', async (req, res) => {
   const { id } = req.params;
-  const { usuario_id } = req.body;
+  const { usuario_id, via_admin, motivo_admin } = req.body;
   const uid = usuario_id || 1;
+
+  const detalhes = via_admin
+    ? { via_admin: true, motivo: motivo_admin || 'Finalizado pelo painel administrativo' }
+    : {};
 
   try {
     await pool.query('BEGIN');
@@ -188,7 +192,7 @@ app.post('/cargas/:id/finalizar', async (req, res) => {
 
     await pool.query(
       `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-      [id, uid, 'carga_finalizada', JSON.stringify({})]
+      [id, uid, 'carga_finalizada', JSON.stringify(detalhes)]
     );
 
     await pool.query('COMMIT');
