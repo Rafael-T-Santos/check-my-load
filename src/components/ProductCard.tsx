@@ -86,7 +86,7 @@ export function ProductCard({ product, onClick, index }: ProductCardProps) {
             </span>
           </div>
 
-          <p className="text-sm text-muted-foreground mt-1 truncate">
+          <p className="text-sm text-muted-foreground mt-1">
             {product.description}
           </p>
 
