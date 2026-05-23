@@ -5,7 +5,7 @@ import {
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
   History, Unlock, Camera, CheckSquare, Flag,
   ArrowUpDown, ArrowUp, ArrowDown,
-  Download, ZoomIn, X, CheckCheck,
+  Download, ZoomIn, X, CheckCheck, Maximize2, Minimize2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -149,6 +149,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const [erpData, setErpData] = useState<ErpItem[] | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcao[]>([]);
   const [lightbox, setLightbox] = useState<LightboxFoto | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
@@ -407,36 +408,54 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   return (
     <>
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden p-0">
+      <DialogContent className={cn(
+        "flex flex-col overflow-hidden p-0",
+        isFullscreen
+          ? "!fixed !inset-0 !translate-x-0 !translate-y-0 !max-w-none !w-screen !h-screen !max-h-screen !m-0 !rounded-none"
+          : "max-w-4xl max-h-[90vh]"
+      )}>
 
         {/* Header */}
         <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogTitle className="text-xl flex items-center gap-2 flex-wrap">
-            Carga #{carga.id}
-            <Badge
-              variant={cargaStatus === 'finalizada' ? 'default' : 'secondary'}
-              className={cn(cargaStatus === 'finalizada' && 'bg-emerald-500')}
-            >
-              {cargaStatus === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
-            </Badge>
-            {cargaStatus !== 'finalizada' && (
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-xl flex items-center gap-2 flex-wrap">
+                Carga #{carga.id}
+                <Badge
+                  variant={cargaStatus === 'finalizada' ? 'default' : 'secondary'}
+                  className={cn(cargaStatus === 'finalizada' && 'bg-emerald-500')}
+                >
+                  {cargaStatus === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
+                </Badge>
+                {cargaStatus !== 'finalizada' && (
+                  <button
+                    onClick={() => setShowConfirmFinalizar(true)}
+                    className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                  >
+                    <CheckCheck className="h-4 w-4" />
+                    Finalizar Carga
+                  </button>
+                )}
+              </DialogTitle>
+              <DialogDescription className="flex flex-wrap gap-4 text-xs mt-1">
+                {carga.placa && <span>Placa: <strong className="text-foreground">{carga.placa}</strong></span>}
+                {erpInfo?.motorista && <span>Motorista: <strong className="text-foreground">{erpInfo.motorista}</strong></span>}
+                {erpInfo?.doca != null && <span>Doca: <strong className="text-foreground">{erpInfo.doca}</strong></span>}
+                {erpInfo?.horaSaida && <span>Saída: <strong className="text-foreground">{formatarData(erpInfo.horaSaida)}</strong></span>}
+                <span>Criado: <strong className="text-foreground">{formatarData(carga.criado_em)}</strong></span>
+                <span>Atualizado: <strong className="text-foreground">{formatarData(carga.atualizado_em)}</strong></span>
+              </DialogDescription>
+            </div>
+            <div className="shrink-0 pr-8">
               <button
-                onClick={() => setShowConfirmFinalizar(true)}
-                className="ml-auto flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                onClick={() => setIsFullscreen(v => !v)}
+                className="h-8 w-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
               >
-                <CheckCheck className="h-4 w-4" />
-                Finalizar Carga
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
-            )}
-          </DialogTitle>
-          <DialogDescription className="flex flex-wrap gap-4 text-xs mt-1">
-            {carga.placa && <span>Placa: <strong className="text-foreground">{carga.placa}</strong></span>}
-            {erpInfo?.motorista && <span>Motorista: <strong className="text-foreground">{erpInfo.motorista}</strong></span>}
-            {erpInfo?.doca != null && <span>Doca: <strong className="text-foreground">{erpInfo.doca}</strong></span>}
-            {erpInfo?.horaSaida && <span>Saída: <strong className="text-foreground">{formatarData(erpInfo.horaSaida)}</strong></span>}
-            <span>Criado: <strong className="text-foreground">{formatarData(carga.criado_em)}</strong></span>
-            <span>Atualizado: <strong className="text-foreground">{formatarData(carga.atualizado_em)}</strong></span>
-          </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         {isLoading ? (
