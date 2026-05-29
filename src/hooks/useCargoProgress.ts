@@ -608,13 +608,17 @@ export function useCargoProgress() {
   const proceedWithJustification = useCallback(async (justificativa: string) => {
     if (!currentCargo) return;
     try {
-      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/observacoes`, {
+      const res = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/observacoes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ justificativa, usuario_id: getLoggedUserId() }),
       });
+      if (!res.ok) throw new Error('Servidor retornou erro');
+      toast.success('Justificativa registrada', { description: 'Prosseguindo para as fotos.' });
     } catch (e) {
       console.error('Erro ao registrar justificativa:', e);
+      toast.error('Erro ao salvar justificativa', { description: 'Verifique a conexão e tente novamente.' });
+      return; // Não avança se falhou — o usuário pode tentar de novo
     }
     setCurrentStep('photos');
   }, [currentCargo]);
@@ -626,13 +630,14 @@ export function useCargoProgress() {
       // 1. Salva as últimas alterações dos produtos
       await saveProgressToDB();
 
-      // 2. Envia as fotos para o backend
-      if (photos.length > 0) {
+      // 2. Envia apenas fotos de finalização (produto já foram enviadas individualmente)
+      const fotosFinalizacao = photos.filter(p => !p.produtoCodigo);
+      if (fotosFinalizacao.length > 0) {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            fotos: photos,
+            fotos: fotosFinalizacao,
             usuario_id: getLoggedUserId(),
             placa: currentCargo.licensePlate
           })

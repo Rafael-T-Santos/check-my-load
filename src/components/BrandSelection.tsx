@@ -287,7 +287,7 @@ export function BrandSelection({
             Selecione pelo menos uma marca para conferir
           </p>
         )}
-        {!allComplete && (
+        {!allComplete && hasCheckedProducts && (
           <Button
             onClick={() => setShowJustifyDialog(true)}
             variant="ghost"
