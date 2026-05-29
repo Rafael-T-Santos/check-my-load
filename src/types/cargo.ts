@@ -33,6 +33,7 @@ export interface PhotoRecord {
   imageData: string; // base64 compressed
   observation: string;
   capturedAt: string;
+  produtoCodigo?: string;
 }
 
 // Bag (Sacola) types

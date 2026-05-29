@@ -47,6 +47,7 @@ interface FotoDB {
   observacao: string;
   conferente: string;
   capturado_em: string;
+  produto_codigo?: string;
 }
 
 interface SacolaProduto {
@@ -150,6 +151,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const [historico, setHistorico] = useState<HistoricoAcao[]>([]);
   const [lightbox, setLightbox] = useState<LightboxFoto | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fotoProdutoCodigo, setFotoProdutoCodigo] = useState<string | null>(null);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
@@ -560,6 +562,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                             <SortableHead label="Conferido" col="qtdConferida"  className="text-center" />
                             <SortableHead label="Conferente" col="conferente" />
                             <SortableHead label="Status"    col="status" />
+                            <TableHead className="w-10" />
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -579,6 +582,25 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                               <TableCell className="text-center font-bold">{p.qtdConferida ?? '-'}</TableCell>
                               <TableCell className="text-xs">{p.conferente}</TableCell>
                               <TableCell><StatusBadge status={p.status} /></TableCell>
+                              <TableCell>
+                                {(() => {
+                                  const count = localData?.fotos.filter(f => f.produto_codigo === p.codigo).length ?? 0;
+                                  return (
+                                    <button
+                                      onClick={() => setFotoProdutoCodigo(p.codigo)}
+                                      className="relative flex items-center justify-center w-7 h-7 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                                      title="Ver fotos do produto"
+                                    >
+                                      <Camera className="h-4 w-4" />
+                                      {count > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                          {count}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -830,6 +852,44 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
         )}
       </DialogContent>
 
+    </Dialog>
+
+    <Dialog open={!!fotoProdutoCodigo} onOpenChange={(open) => { if (!open) setFotoProdutoCodigo(null); }}>
+      <DialogContent className="max-w-sm max-h-[80vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="text-base">Fotos do Produto #{fotoProdutoCodigo}</DialogTitle>
+          <DialogDescription className="text-xs">Registradas durante a conferência</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {(() => {
+            const fotos = localData?.fotos.filter(f => f.produto_codigo === fotoProdutoCodigo) ?? [];
+            if (fotos.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma foto registrada para este produto.</p>
+              );
+            }
+            return fotos.map(foto => (
+              <div key={foto.id} className="border rounded-xl overflow-hidden">
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                >
+                  <img src={foto.imagem_base64} alt="Foto do produto" className="w-full h-48 object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomIn className="h-8 w-8 text-white" />
+                  </div>
+                </div>
+                {foto.observacao && (
+                  <p className="text-xs text-muted-foreground px-3 pt-2">{foto.observacao}</p>
+                )}
+                <p className="text-[10px] text-right text-muted-foreground px-3 pb-2">
+                  {foto.conferente} · {formatarData(foto.capturado_em)}
+                </p>
+              </div>
+            ));
+          })()}
+        </div>
+      </DialogContent>
     </Dialog>
 
     <AlertDialog open={showConfirmFinalizar} onOpenChange={setShowConfirmFinalizar}>

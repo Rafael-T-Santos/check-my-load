@@ -368,6 +368,29 @@ export function useCargoProgress() {
     setPhotos(prev => [...prev, newPhoto]);
   }, []);
 
+  const addProductPhoto = useCallback(async (imageData: string, observation: string, produtoCodigo: string) => {
+    const newPhoto: PhotoRecord = {
+      id: `photo-prod-${Date.now()}`,
+      imageData,
+      observation,
+      capturedAt: new Date().toISOString(),
+      produtoCodigo,
+    };
+    setPhotos(prev => [...prev, newPhoto]);
+
+    if (currentCargo) {
+      try {
+        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fotos: [newPhoto], usuario_id: getLoggedUserId() }),
+        });
+      } catch (e) {
+        console.error('Erro ao salvar foto do produto:', e);
+      }
+    }
+  }, [currentCargo]);
+
   const updatePhotoObservation = useCallback((photoId: string, observation: string) => {
     setPhotos(prev =>
       prev.map(p => (p.id === photoId ? { ...p, observation } : p))
@@ -652,7 +675,7 @@ export function useCargoProgress() {
   }, [getStats]);
 
   const canFinalize = useCallback(() => {
-    return photos.length >= 5;
+    return photos.filter(p => !p.produtoCodigo).length >= 5;
   }, [photos]);
 
   const allBrandsComplete = useCallback(() => {
@@ -678,6 +701,7 @@ export function useCargoProgress() {
     searchCargo,
     updateProduct,
     addPhoto,
+    addProductPhoto,
     updatePhotoObservation,
     removePhoto,
     addBag,

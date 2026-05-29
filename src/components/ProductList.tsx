@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Save, CheckCircle, AlertCircle, Package, ArrowRight, ShoppingBag, Eye, PackageSearch, CornerDownLeft, Truck } from 'lucide-react';
-import { Cargo, Product, Bag, ActionType } from '@/types/cargo';
+import { Cargo, Product, Bag, ActionType, PhotoRecord } from '@/types/cargo';
 import { Button } from '@/components/ui/button';
 import { ProductCard } from './ProductCard';
+import { ProductPhotoModal } from './ProductPhotoModal';
 import { VerificationModal } from './VerificationModal';
 import { ProductSearchBar } from './ProductSearchBar';
 import { ProductFiltersDrawer } from './ProductFiltersDrawer';
@@ -35,6 +36,8 @@ interface ProductListProps {
   onAddHistoryEntry: (type: ActionType, description: string, metadata?: Record<string, unknown>) => void;
   onClearHistory: () => void;
   selectedBrands?: string[];
+  photos: PhotoRecord[];
+  onAddProductPhoto: (imageData: string, observation: string, produtoCodigo: string) => Promise<void>;
 }
 
 export function ProductList({
@@ -52,9 +55,12 @@ export function ProductList({
   onAddHistoryEntry,
   onClearHistory,
   selectedBrands,
+  photos,
+  onAddProductPhoto,
 }: ProductListProps) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [photoModalProduct, setPhotoModalProduct] = useState<Product | null>(null);
   const [isBagFlowOpen, setIsBagFlowOpen] = useState(false);
   const [isBagListOpen, setIsBagListOpen] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -314,6 +320,8 @@ export function ProductList({
                 <ProductCard
                   product={product}
                   onClick={() => handleProductClick(product)}
+                  onCameraClick={() => setPhotoModalProduct(product)}
+                  photoCount={photos.filter(p => p.produtoCodigo === product.code).length}
                   index={index}
                 />
               </motion.div>
@@ -357,6 +365,19 @@ export function ProductList({
         onReset={resetFilters}
         hasActiveFilters={hasActiveFilters}
       />
+
+      {/* Product Photo Modal */}
+      {photoModalProduct && (
+        <ProductPhotoModal
+          product={photoModalProduct}
+          isOpen={!!photoModalProduct}
+          photos={photos.filter(p => p.produtoCodigo === photoModalProduct.code)}
+          onClose={() => setPhotoModalProduct(null)}
+          onAddPhoto={(imageData, observation) =>
+            onAddProductPhoto(imageData, observation, photoModalProduct.code)
+          }
+        />
+      )}
 
       {/* Proceed Warning Dialog */}
       <ConfirmationDialog

@@ -20,6 +20,7 @@ const Index = () => {
     searchCargo,
     updateProduct,
     addPhoto,
+    addProductPhoto,
     updatePhotoObservation,
     removePhoto,
     addBag,
@@ -202,6 +203,8 @@ const Index = () => {
       onAddHistoryEntry={addHistoryEntry}
       onClearHistory={clearHistory}
       selectedBrands={selectedBrands}
+      photos={photos}
+      onAddProductPhoto={addProductPhoto}
     />
   );
 };
