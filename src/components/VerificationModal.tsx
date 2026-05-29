@@ -22,16 +22,21 @@ export function VerificationModal({
 }: VerificationModalProps) {
   const [manualCode, setManualCode] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [isCodeValid, setIsCodeValid] = useState(false);
+  const [isBarcode1Valid, setIsBarcode1Valid] = useState(false);
+  const [isBarcode2Valid, setIsBarcode2Valid] = useState(true);
   const [showCodeError, setShowCodeError] = useState(false);
   const [isScannerActive, setIsScannerActive] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
+
+  const allBarcodesValid = isBarcode1Valid && isBarcode2Valid;
+  const isOnBarcode2Phase = isBarcode1Valid && !isBarcode2Valid;
 
   useEffect(() => {
     if (isOpen) {
       setManualCode('');
       setQuantity('');
-      setIsCodeValid(product?.hasBarcode === false);
+      setIsBarcode1Valid(product?.hasBarcode === false);
+      setIsBarcode2Valid(!product?.barcode2);
       setShowCodeError(false);
       setIsScannerActive(false);
       setShowManualInput(false);
@@ -41,17 +46,26 @@ export function VerificationModal({
   if (!product) return null;
 
   const validateCode = (code: string) => {
-    const isValid = code === product?.code || code === product?.barcode;
+    const isValid = isOnBarcode2Phase
+      ? code === product.barcode2 || code === product.code
+      : code === product.code || code === product.barcode;
 
     if (code.length > 0) {
       if (isValid) {
         playFeedback('success');
-      } else if (!isValid && isScannerActive) {
+        if (isOnBarcode2Phase) {
+          setIsBarcode2Valid(true);
+        } else {
+          setIsBarcode1Valid(true);
+          setManualCode('');
+          setShowCodeError(false);
+          setShowManualInput(false);
+        }
+      } else if (isScannerActive) {
         playFeedback('error');
       }
     }
 
-    setIsCodeValid(isValid);
     setShowCodeError(!isValid && code.length > 0);
     return isValid;
   };
@@ -69,14 +83,13 @@ export function VerificationModal({
       validateCode(value);
     } else {
       setShowCodeError(false);
-      setIsCodeValid(false);
     }
   };
 
   const handleConfirm = () => {
     // Trocamos parseInt por Number para aceitar casas decimais
     const qty = Number(quantity);
-    if (isCodeValid && !isNaN(qty) && qty >= 0) {
+    if (allBarcodesValid && !isNaN(qty) && qty >= 0) {
       onConfirm(product.code, qty);
       onClose();
     }
@@ -138,17 +151,35 @@ export function VerificationModal({
                     {product.totalQuantity} un.
                   </span>
                 </div>
-                <div className="pt-2 border-t border-border/50">
-                  <span className="text-xs text-muted-foreground">Código de barras: </span>
-                  <span className="font-mono text-xs">{product.barcode}</span>
+                <div className="pt-2 border-t border-border/50 space-y-1">
+                  <div>
+                    <span className="text-xs text-muted-foreground">{product.barcode2 ? 'Cód. barras 1: ' : 'Código de barras: '}</span>
+                    <span className="font-mono text-xs">{product.barcode || '-'}</span>
+                  </div>
+                  {product.barcode2 && (
+                    <div>
+                      <span className="text-xs text-muted-foreground">Cód. barras 2: </span>
+                      <span className="font-mono text-xs">{product.barcode2}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Code Verification */}
-              {!isCodeValid && (
+              {!allBarcodesValid && (
                 <div className="space-y-3">
+                  {/* Indicador de progresso quando está na fase 2 */}
+                  {isOnBarcode2Phase && (
+                    <div className="flex items-center gap-2 p-3 bg-success-light rounded-lg">
+                      <Check className="w-5 h-5 text-success" />
+                      <span className="text-sm font-medium text-success">1º código verificado!</span>
+                    </div>
+                  )}
+
                   <p className="text-sm font-medium text-center text-muted-foreground">
-                    Verifique o produto escaneando ou digitando o código
+                    {isOnBarcode2Phase
+                      ? 'Agora escaneie o 2º código de barras'
+                      : 'Verifique o produto escaneando ou digitando o código'}
                   </p>
 
                   <BarcodeScanner
@@ -158,7 +189,7 @@ export function VerificationModal({
                   />
 
                   {showCodeError && (
-                    <motion.div 
+                    <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="bg-destructive/10 p-3 rounded-md space-y-2 border border-destructive/20 my-4"
@@ -172,7 +203,20 @@ export function VerificationModal({
                           Lido: <span className="font-mono font-bold text-foreground text-sm">{manualCode}</span>
                         </p>
                         <p className="text-muted-foreground">
-                          Esperado: <span className="font-mono font-bold text-foreground">{product.barcode || 'Sem EAN'}</span> ou <span className="font-mono">{product.code}</span>
+                          Esperado:{' '}
+                          {isOnBarcode2Phase ? (
+                            <>
+                              <span className="font-mono font-bold text-foreground">{product.barcode2}</span>
+                              {' '}ou{' '}
+                              <span className="font-mono">{product.code}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-mono font-bold text-foreground">{product.barcode || 'Sem EAN'}</span>
+                              {' '}ou{' '}
+                              <span className="font-mono">{product.code}</span>
+                            </>
+                          )}
                         </p>
                       </div>
                     </motion.div>
@@ -217,7 +261,7 @@ export function VerificationModal({
               )}
 
               {/* Code Valid - Quantity Input */}
-              {isCodeValid && (
+              {allBarcodesValid && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -228,7 +272,9 @@ export function VerificationModal({
                     <span className="text-sm font-medium text-success">
                       {product?.hasBarcode === false
                         ? 'Produto não exige validação de código. Insira a quantidade.'
-                        : 'Código verificado!'}
+                        : product?.barcode2
+                          ? '2 códigos verificados! Insira a quantidade.'
+                          : 'Código verificado!'}
                     </span>
                   </div>
 
@@ -284,7 +330,7 @@ export function VerificationModal({
             </div>
 
             {/* Footer Fixo (Botão de Confirmar) */}
-            {isCodeValid && (
+            {allBarcodesValid && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}

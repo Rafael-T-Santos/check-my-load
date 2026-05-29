@@ -8,6 +8,7 @@ export interface Product {
   code: string;
   description: string;
   barcode: string;
+  barcode2?: string;
   brand: string;
   orders: OrderProduct[];
   totalQuantity: number;

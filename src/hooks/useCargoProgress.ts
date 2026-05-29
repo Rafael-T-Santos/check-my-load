@@ -16,6 +16,7 @@ interface ApiCargoItem {
   seqCarga?: number | null;
   qtdNeg: number;
   referencia: string;
+  referencia2?: string;
   validaCodBarra: string;
 }
 
@@ -36,6 +37,7 @@ function transformApiToCargo(apiData: ApiCargoItem[]): Cargo {
       productMap.set(prodCode, {
         code: prodCode,
         barcode: item.referencia || '',
+        barcode2: item.referencia2 || undefined,
         description: item.descrProd,
         brand: item.marca || 'SEM MARCA',
         totalQuantity: 0,
