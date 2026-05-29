@@ -487,7 +487,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                 <ShoppingBag className="h-4 w-4" /> Sacolas ({sacolas?.length ?? 0})
               </TabsTrigger>
               <TabsTrigger value="fotos" className="flex items-center gap-1.5">
-                <Image className="h-4 w-4" /> Fotos ({localData?.fotos.length ?? 0})
+                <Image className="h-4 w-4" /> Fotos ({(localData?.fotos.length ?? 0) + (sacolas?.reduce((acc, s) => acc + s.photos.length, 0) ?? 0)})
               </TabsTrigger>
               <TabsTrigger value="atividade" className="flex items-center gap-1.5">
                 <History className="h-4 w-4" /> Atividade ({historico.length})
@@ -745,34 +745,106 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
 
               {/* ── FOTOS ──────────────────────────────────────────────── */}
               <TabsContent value="fotos" className="mt-0">
-                {!localData?.fotos.length ? (
-                  <p className="text-sm text-muted-foreground py-4">Nenhuma foto registrada para esta carga.</p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {localData.fotos.map(foto => (
-                      <div key={foto.id} className="border rounded-lg overflow-hidden">
-                        <div
-                          className="relative group cursor-pointer"
-                          onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
-                        >
-                          <img src={foto.imagem_base64} alt="Evidência" className="w-full h-36 object-cover" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <ZoomIn className="h-8 w-8 text-white" />
-                          </div>
-                        </div>
-                        <div className="p-2 space-y-1">
-                          <p className="text-xs text-muted-foreground break-words line-clamp-2">
-                            {foto.observacao || 'Sem observação'}
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-medium text-primary">{foto.conferente || 'Sistema'}</p>
-                            <p className="text-[10px] text-muted-foreground">{formatarData(foto.capturado_em)}</p>
-                          </div>
+                {(() => {
+                  const fotosProduto     = localData?.fotos.filter(f => f.produto_codigo) ?? [];
+                  const fotosFinalizacao = localData?.fotos.filter(f => !f.produto_codigo) ?? [];
+                  const fotosSacola      = sacolas?.flatMap(s =>
+                    s.photos.map(p => ({ ...p, sacolaId: s.id }))
+                  ) ?? [];
+                  const totalFotos = fotosProduto.length + fotosFinalizacao.length + fotosSacola.length;
+
+                  if (totalFotos === 0) {
+                    return <p className="text-sm text-muted-foreground py-4">Nenhuma foto registrada para esta carga.</p>;
+                  }
+
+                  const FotoGrid = ({ children }: { children: React.ReactNode }) => (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{children}</div>
+                  );
+
+                  const FotoCard = ({ src, observacao, rodape, onClick }: {
+                    src: string; observacao?: string; rodape: React.ReactNode; onClick: () => void;
+                  }) => (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="relative group cursor-pointer" onClick={onClick}>
+                        <img src={src} alt="Foto" className="w-full h-36 object-cover" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <ZoomIn className="h-8 w-8 text-white" />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div className="p-2 space-y-1">
+                        {observacao && (
+                          <p className="text-xs text-muted-foreground break-words line-clamp-2">{observacao}</p>
+                        )}
+                        <div className="text-[10px] text-muted-foreground">{rodape}</div>
+                      </div>
+                    </div>
+                  );
+
+                  return (
+                    <div className="space-y-6">
+                      {fotosProduto.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <Camera className="h-3.5 w-3.5" /> Fotos de Produto ({fotosProduto.length})
+                          </h4>
+                          <FotoGrid>
+                            {fotosProduto.map(foto => (
+                              <div key={foto.id} className="flex flex-col gap-1">
+                                <span className="text-[10px] font-mono font-medium text-primary">#{foto.produto_codigo}</span>
+                                <FotoCard
+                                  src={foto.imagem_base64}
+                                  observacao={foto.observacao || undefined}
+                                  rodape={<span>{foto.conferente || 'Sistema'} · {formatarData(foto.capturado_em)}</span>}
+                                  onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                                />
+                              </div>
+                            ))}
+                          </FotoGrid>
+                        </div>
+                      )}
+
+                      {fotosSacola.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <ShoppingBag className="h-3.5 w-3.5" /> Fotos de Sacola ({fotosSacola.length})
+                          </h4>
+                          <FotoGrid>
+                            {fotosSacola.map(foto => (
+                              <div key={foto.id} className="flex flex-col gap-1">
+                                <span className="text-[10px] font-mono font-medium text-amber-600">{foto.sacolaId}</span>
+                                <FotoCard
+                                  src={foto.imageData}
+                                  observacao={foto.observation || undefined}
+                                  rodape={<span>{formatarData(foto.capturedAt)}</span>}
+                                  onClick={() => setLightbox({ src: foto.imageData, observacao: foto.observation || '', data: formatarData(foto.capturedAt) })}
+                                />
+                              </div>
+                            ))}
+                          </FotoGrid>
+                        </div>
+                      )}
+
+                      {fotosFinalizacao.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <Flag className="h-3.5 w-3.5" /> Fotos de Finalização ({fotosFinalizacao.length})
+                          </h4>
+                          <FotoGrid>
+                            {fotosFinalizacao.map(foto => (
+                              <FotoCard
+                                key={foto.id}
+                                src={foto.imagem_base64}
+                                observacao={foto.observacao || undefined}
+                                rodape={<span>{foto.conferente || 'Sistema'} · {formatarData(foto.capturado_em)}</span>}
+                                onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                              />
+                            ))}
+                          </FotoGrid>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </TabsContent>
 
               {/* ── ATIVIDADE ──────────────────────────────────────────── */}
