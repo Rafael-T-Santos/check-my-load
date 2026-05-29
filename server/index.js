@@ -506,6 +506,33 @@ app.get('/admin/cargas/:id/historico', async (req, res) => {
   }
 });
 
+// Registrar observação / justificativa fora do padrão
+app.post('/cargas/:id/observacoes', async (req, res) => {
+  const { id } = req.params;
+  const { justificativa, usuario_id } = req.body;
+  const uid = usuario_id || 1;
+  if (!justificativa || justificativa.trim().length < 10) {
+    return res.status(400).json({ error: 'Justificativa muito curta' });
+  }
+  try {
+    await pool.query('BEGIN');
+    await pool.query(
+      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [id]
+    );
+    await pool.query(
+      `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+      [id, uid, 'finalizacao_justificada', JSON.stringify({ justificativa: justificativa.trim() })]
+    );
+    await pool.query('COMMIT');
+    res.json({ sucesso: true });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Erro ao salvar observação:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 // Buscar dados do cliente para etiqueta da sacola
 app.post('/sacolas/etiqueta-cliente', async (req, res) => {
   const { pedido } = req.body;

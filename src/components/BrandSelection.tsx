@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Save, Truck, CheckCircle, Package, ArrowRight, Camera, AlertTriangle, ShoppingBag, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Truck, CheckCircle, Package, ArrowRight, Camera, AlertTriangle, ShoppingBag, Eye, FileWarning } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { Product, BrandStatus, Bag, OrderInfo, Cargo } from '@/types/cargo';
 import { BagCreationFlow } from './bags/BagCreationFlow';
 import { BagListModal } from './bags/BagListModal';
@@ -17,6 +19,7 @@ interface BrandSelectionProps {
   onToggleBrand: (brand: string) => void;
   onStartVerification: () => void;
   onProceedToPhotos: () => void;
+  onProceedWithJustification: (justification: string) => Promise<void>;
   onBack: () => void;
   onSave: () => void;
   allComplete: boolean;
@@ -41,13 +44,14 @@ function getBrandPending(products: Product[], brand: string): number {
 }
 
 export function BrandSelection({
-  cargo, // <- Recebe o objeto completo
+  cargo,
   brandStatuses,
   selectedBrands,
   products,
   onToggleBrand,
   onStartVerification,
   onProceedToPhotos,
+  onProceedWithJustification,
   onBack,
   onSave,
   allComplete,
@@ -61,6 +65,24 @@ export function BrandSelection({
 }: BrandSelectionProps) {
   const [isBagFlowOpen, setIsBagFlowOpen] = useState(false);
   const [isBagListOpen, setIsBagListOpen] = useState(false);
+  const [showJustifyDialog, setShowJustifyDialog] = useState(false);
+  const [justifyText, setJustifyText] = useState('');
+  const [isSubmittingJustify, setIsSubmittingJustify] = useState(false);
+
+  const MIN_JUSTIFICATION_LENGTH = 20;
+  const canSubmitJustification = justifyText.trim().length >= MIN_JUSTIFICATION_LENGTH;
+
+  const handleJustifyConfirm = async () => {
+    if (!canSubmitJustification) return;
+    setIsSubmittingJustify(true);
+    try {
+      await onProceedWithJustification(justifyText.trim());
+      setShowJustifyDialog(false);
+      setJustifyText('');
+    } finally {
+      setIsSubmittingJustify(false);
+    }
+  };
 
   const totalProducts = brandStatuses.reduce((sum, b) => sum + b.total, 0);
   const totalChecked = brandStatuses.reduce((sum, b) => sum + b.checked, 0);
@@ -265,7 +287,56 @@ export function BrandSelection({
             Selecione pelo menos uma marca para conferir
           </p>
         )}
+        {!allComplete && (
+          <Button
+            onClick={() => setShowJustifyDialog(true)}
+            variant="ghost"
+            className="w-full text-muted-foreground hover:text-warning hover:bg-warning/10"
+          >
+            <FileWarning className="w-4 h-4 mr-2" />
+            Finalizar com justificativa
+          </Button>
+        )}
       </div>
+
+      {/* Justification Dialog */}
+      <Dialog open={showJustifyDialog} onOpenChange={(open) => { setShowJustifyDialog(open); if (!open) setJustifyText(''); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileWarning className="w-5 h-5 text-warning" />
+              Finalização antecipada
+            </DialogTitle>
+            <DialogDescription>
+              Há produtos pendentes ou com divergências. Justifique o motivo para prosseguir.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              placeholder="Descreva o motivo da finalização antecipada..."
+              value={justifyText}
+              onChange={(e) => setJustifyText(e.target.value)}
+              rows={4}
+              className="resize-none"
+            />
+            <p className={`text-xs text-right ${justifyText.trim().length < MIN_JUSTIFICATION_LENGTH ? 'text-muted-foreground' : 'text-success'}`}>
+              {justifyText.trim().length}/{MIN_JUSTIFICATION_LENGTH} caracteres mínimos
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowJustifyDialog(false); setJustifyText(''); }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleJustifyConfirm}
+              disabled={!canSubmitJustification || isSubmittingJustify}
+              variant="default"
+            >
+              {isSubmittingJustify ? 'Salvando...' : 'Confirmar e prosseguir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BagCreationFlow
         isOpen={isBagFlowOpen}

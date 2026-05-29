@@ -47,6 +47,7 @@ const Index = () => {
     goToVerification,
     goToBrandSelection,
     allBrandsComplete,
+    proceedWithJustification,
   } = useCargoProgress();
 
   const {
@@ -116,6 +117,11 @@ const Index = () => {
     proceedToPhotos(); // Depois vai pras fotos
   };
 
+  const handleProceedWithJustification = async (justificativa: string) => {
+    await handleSaveToDatabase();
+    await proceedWithJustification(justificativa);
+  };
+
   // Search screen
   if (!currentCargo) {
     return <LoadSearch onSearch={handleSearchSubmit} />;
@@ -135,10 +141,11 @@ const Index = () => {
 
   // Photo capture screen
   if (currentStep === 'photos') {
+    const finalizationPhotos = photos.filter(p => !p.produtoCodigo);
     return (
       <PhotoCapture
         cargoId={currentCargo.id}
-        photos={photos}
+        photos={finalizationPhotos}
         onBack={goToBrandSelection}
         onAddPhoto={handleAddPhoto}
         onUpdateObservation={updatePhotoObservation}
@@ -174,6 +181,7 @@ const Index = () => {
           toast.success('Sincronizado!', { description: 'Dados atualizados com o servidor.' });
         }}
         onProceedToPhotos={handleProceedToPhotos}
+        onProceedWithJustification={handleProceedWithJustification}
         onBack={clearCargo}
         allComplete={allBrandsComplete()}
       />

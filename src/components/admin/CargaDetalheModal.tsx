@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Package, Image, ShoppingBag, AlertTriangle, LayoutList,
   CheckCircle, XCircle, AlertCircle, MinusCircle, Loader2,
-  History, Unlock, Camera, CheckSquare, Flag,
+  History, Unlock, Camera, CheckSquare, Flag, FileWarning, MessageSquareWarning,
   ArrowUpDown, ArrowUp, ArrowDown,
   Download, ZoomIn, X, CheckCheck, Maximize2, Minimize2,
 } from 'lucide-react';
@@ -113,11 +113,12 @@ interface HistoricoAcao {
 // ─── Ação config (timeline) ───────────────────────────────────────────────────
 
 const ACAO_CONFIG: Record<string, { label: string; cor: string; icon: ElementType }> = {
-  carga_aberta:      { label: 'Conferência aberta',    cor: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Unlock },
-  produto_conferido: { label: 'Produto conferido',     cor: 'bg-blue-100 text-blue-700 border-blue-200',          icon: CheckSquare },
-  foto_adicionada:   { label: 'Foto adicionada',       cor: 'bg-purple-100 text-purple-700 border-purple-200',    icon: Camera },
-  sacola_criada:     { label: 'Sacola criada',         cor: 'bg-amber-100 text-amber-700 border-amber-200',       icon: ShoppingBag },
-  carga_finalizada:  { label: 'Conferência finalizada', cor: 'bg-gray-100 text-gray-700 border-gray-200',         icon: Flag },
+  carga_aberta:             { label: 'Conferência aberta',        cor: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Unlock },
+  produto_conferido:        { label: 'Produto conferido',         cor: 'bg-blue-100 text-blue-700 border-blue-200',          icon: CheckSquare },
+  foto_adicionada:          { label: 'Foto adicionada',           cor: 'bg-purple-100 text-purple-700 border-purple-200',    icon: Camera },
+  sacola_criada:            { label: 'Sacola criada',             cor: 'bg-amber-100 text-amber-700 border-amber-200',       icon: ShoppingBag },
+  carga_finalizada:         { label: 'Conferência finalizada',    cor: 'bg-gray-100 text-gray-700 border-gray-200',          icon: Flag },
+  finalizacao_justificada:  { label: 'Finalização antecipada',   cor: 'bg-orange-100 text-orange-700 border-orange-200',    icon: FileWarning },
 };
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -492,6 +493,22 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
               <TabsTrigger value="atividade" className="flex items-center gap-1.5">
                 <History className="h-4 w-4" /> Atividade ({historico.length})
               </TabsTrigger>
+              {(() => {
+                const obsCount = historico.filter(h =>
+                  h.acao === 'finalizacao_justificada' ||
+                  (h.acao === 'carga_finalizada' && (h.detalhes as any)?.via_admin)
+                ).length;
+                return (
+                  <TabsTrigger value="observacoes" className="flex items-center gap-1.5">
+                    <MessageSquareWarning className="h-4 w-4" /> Observações
+                    {obsCount > 0 && (
+                      <span className="ml-1 bg-orange-500 text-white text-[10px] rounded-full px-1.5 py-0.5 leading-none font-bold">
+                        {obsCount}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                );
+              })()}
             </TabsList>
 
             <div className="flex-1 overflow-y-auto px-6 pb-6 pt-4">
@@ -847,6 +864,70 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                 })()}
               </TabsContent>
 
+              {/* ── OBSERVAÇÕES ────────────────────────────────────────── */}
+              <TabsContent value="observacoes" className="mt-0">
+                {(() => {
+                  const obsEntries = historico.filter(h =>
+                    h.acao === 'finalizacao_justificada' ||
+                    (h.acao === 'carga_finalizada' && (h.detalhes as any)?.via_admin)
+                  );
+                  if (obsEntries.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center gap-2 py-10 text-center">
+                        <CheckCircle className="h-10 w-10 text-emerald-500" />
+                        <p className="font-medium">Nenhuma observação</p>
+                        <p className="text-sm text-muted-foreground">Esta carga seguiu o fluxo padrão de conferência.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {obsEntries.map(item => {
+                        const det = item.detalhes ?? {};
+                        const isEarlyFinish = item.acao === 'finalizacao_justificada';
+                        return (
+                          <div
+                            key={item.id}
+                            className={cn(
+                              'rounded-lg border p-4 space-y-2',
+                              isEarlyFinish ? 'bg-orange-50 border-orange-200' : 'bg-amber-50 border-amber-200'
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                {isEarlyFinish
+                                  ? <FileWarning className="h-4 w-4 text-orange-600 shrink-0" />
+                                  : <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                                }
+                                <span className={cn('text-sm font-semibold', isEarlyFinish ? 'text-orange-800' : 'text-amber-800')}>
+                                  {isEarlyFinish ? 'Finalização antecipada pelo operador' : 'Finalização forçada pelo admin'}
+                                </span>
+                              </div>
+                              <time className="text-[11px] text-muted-foreground">{formatarData(item.criado_em)}</time>
+                            </div>
+                            {item.usuario && (
+                              <p className="text-xs text-muted-foreground">Responsável: <strong className="text-foreground">{item.usuario}</strong></p>
+                            )}
+                            {(det as any).justificativa && (
+                              <div className="bg-white rounded-md border px-3 py-2">
+                                <p className="text-xs font-medium text-muted-foreground mb-0.5">Justificativa:</p>
+                                <p className="text-sm">{String((det as any).justificativa)}</p>
+                              </div>
+                            )}
+                            {(det as any).motivo_admin && (
+                              <div className="bg-white rounded-md border px-3 py-2">
+                                <p className="text-xs font-medium text-muted-foreground mb-0.5">Motivo (admin):</p>
+                                <p className="text-sm">{String((det as any).motivo_admin)}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </TabsContent>
+
               {/* ── ATIVIDADE ──────────────────────────────────────────── */}
               <TabsContent value="atividade" className="mt-0">
                 {historico.length === 0 ? (
@@ -910,6 +991,12 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                                   ? ` — Pedidos: ${det.pedidos.join(', ')}`
                                   : ''}
                               </p>
+                            )}
+                            {item.acao === 'finalizacao_justificada' && (det as any).justificativa && (
+                              <div className="flex items-start gap-1.5 mt-1 text-xs bg-orange-50 border border-orange-200 rounded px-2 py-1 text-orange-800">
+                                <FileWarning className="h-3 w-3 shrink-0 mt-0.5" />
+                                <span>{String((det as any).justificativa)}</span>
+                              </div>
                             )}
                           </div>
                         </li>

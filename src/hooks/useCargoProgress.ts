@@ -605,6 +605,20 @@ export function useCargoProgress() {
     setCurrentStep('photos');
   }, []);
 
+  const proceedWithJustification = useCallback(async (justificativa: string) => {
+    if (!currentCargo) return;
+    try {
+      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/observacoes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ justificativa, usuario_id: getLoggedUserId() }),
+      });
+    } catch (e) {
+      console.error('Erro ao registrar justificativa:', e);
+    }
+    setCurrentStep('photos');
+  }, [currentCargo]);
+
   const completeConference = useCallback(async () => {
     if (!currentCargo) return;
     
@@ -717,6 +731,7 @@ export function useCargoProgress() {
     saveProgressToDB,
     syncWithServer,
     proceedToPhotos,
+    proceedWithJustification,
     completeConference,
     getStats,
     getStatsForBrands,
