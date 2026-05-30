@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Search, Package, CheckCircle, Clock, TrendingUp } from 'lucide-react';
+import { RefreshCw, Search, Package, CheckCircle, Clock, TrendingUp, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,11 @@ const AdminCargas = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedCargaId, setSelectedCargaId] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const POR_PAGINA = 15;
+  type SortKey = 'id' | 'placa' | 'status' | 'criado_em' | 'atualizado_em';
+  const [sortKey, setSortKey] = useState<SortKey>('atualizado_em');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const fetchCargas = async () => {
     setLoading(true);
@@ -51,16 +56,40 @@ const AdminCargas = () => {
     return { total, finalizadas, emAndamento, taxa };
   }, [cargas]);
 
-  const filteredCargas = useMemo(() =>
-    cargas.filter(c => {
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+    setPagina(1);
+  };
+
+  const filteredCargas = useMemo(() => {
+    const filtered = cargas.filter(c => {
       const matchSearch = !search ||
         c.id.toLowerCase().includes(search.toLowerCase()) ||
         (c.placa?.toLowerCase().includes(search.toLowerCase()));
       const matchStatus = statusFilter === 'all' || c.status === statusFilter;
       return matchSearch && matchStatus;
-    }),
-    [cargas, search, statusFilter]
-  );
+    });
+
+    return [...filtered].sort((a, b) => {
+      const va = a[sortKey] ?? '';
+      const vb = b[sortKey] ?? '';
+      const cmp = sortKey === 'id'
+        ? Number(va) - Number(vb)
+        : String(va).localeCompare(String(vb), 'pt-BR');
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [cargas, search, statusFilter, sortKey, sortDir]);
+
+  // Reset página ao mudar filtros
+  useEffect(() => { setPagina(1); }, [search, statusFilter]);
+
+  const totalPaginas = Math.max(1, Math.ceil(filteredCargas.length / POR_PAGINA));
+  const cargasPagina = filteredCargas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   const formatarData = (d: string) => d ? new Date(d).toLocaleString('pt-BR') : '-';
 
@@ -133,40 +162,75 @@ const AdminCargas = () => {
           ) : filteredCargas.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhuma carga encontrada.</div>
           ) : (
-            <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="font-semibold">Ordem</TableHead>
-                    <TableHead className="font-semibold">Placa</TableHead>
-                    <TableHead className="font-semibold">Status</TableHead>
-                    <TableHead className="font-semibold">Criado em</TableHead>
-                    <TableHead className="text-right font-semibold">Atualizado em</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCargas.map(carga => (
-                    <TableRow
-                      key={carga.id}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setSelectedCargaId(carga.id)}
-                    >
-                      <TableCell className="font-medium">#{carga.id}</TableCell>
-                      <TableCell>{carga.placa || '-'}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={carga.status === 'finalizada' ? 'default' : 'secondary'}
-                          className={cn(carga.status === 'finalizada' && 'bg-emerald-500 hover:bg-emerald-600')}
-                        >
-                          {carga.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{formatarData(carga.criado_em)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatarData(carga.atualizado_em)}</TableCell>
+            <div className="space-y-3">
+              <div className="rounded-md border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      {([
+                        { key: 'id',           label: 'Ordem',        className: '' },
+                        { key: 'placa',        label: 'Placa',        className: '' },
+                        { key: 'status',       label: 'Status',       className: '' },
+                        { key: 'criado_em',    label: 'Criado em',    className: '' },
+                        { key: 'atualizado_em',label: 'Atualizado em',className: 'text-right' },
+                      ] as { key: SortKey; label: string; className: string }[]).map(col => {
+                        const active = sortKey === col.key;
+                        const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+                        return (
+                          <TableHead
+                            key={col.key}
+                            className={cn('font-semibold cursor-pointer select-none hover:bg-muted/80 whitespace-nowrap', col.className)}
+                            onClick={() => handleSort(col.key)}
+                          >
+                            <span className={cn('inline-flex items-center gap-1', col.className)}>
+                              {col.label}
+                              <Icon className={cn('h-3.5 w-3.5', active ? 'opacity-100' : 'opacity-40')} />
+                            </span>
+                          </TableHead>
+                        );
+                      })}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {cargasPagina.map(carga => (
+                      <TableRow
+                        key={carga.id}
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => setSelectedCargaId(carga.id)}
+                      >
+                        <TableCell className="font-medium">#{carga.id}</TableCell>
+                        <TableCell>{carga.placa || '-'}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={carga.status === 'finalizada' ? 'default' : 'secondary'}
+                            className={cn(carga.status === 'finalizada' && 'bg-emerald-500 hover:bg-emerald-600')}
+                          >
+                            {carga.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{formatarData(carga.criado_em)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatarData(carga.atualizado_em)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {totalPaginas > 1 && (
+                <div className="flex items-center justify-between text-sm text-muted-foreground px-1">
+                  <span>
+                    {(pagina - 1) * POR_PAGINA + 1}–{Math.min(pagina * POR_PAGINA, filteredCargas.length)} de {filteredCargas.length} cargas
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" onClick={() => setPagina(p => p - 1)} disabled={pagina === 1}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="px-2 font-medium text-foreground">{pagina} / {totalPaginas}</span>
+                    <Button variant="outline" size="sm" onClick={() => setPagina(p => p + 1)} disabled={pagina === totalPaginas}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

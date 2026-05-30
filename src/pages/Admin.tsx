@@ -182,8 +182,8 @@ const Admin = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background border-b shadow-sm px-4 md:px-8 py-4 flex items-center justify-between">
+    <div className="h-screen flex flex-col bg-background">
+      <header className="flex-none bg-background border-b shadow-sm px-4 md:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary rounded-lg">
             <Activity className="h-6 w-6 text-primary-foreground" />
@@ -198,7 +198,7 @@ const Admin = () => {
           Sair
         </Button>
       </header>
-      <div className="p-4 md:p-8">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8">
 
       <Tabs defaultValue="cargas" className="space-y-4">
         <TabsList>
@@ -532,7 +532,7 @@ const Admin = () => {
           </form>
         </DialogContent>
       </Dialog>
-    </div>{/* p-4 md:p-8 */}
+    </main>
     </div>
   );
 };

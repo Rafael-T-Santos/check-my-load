@@ -21,7 +21,7 @@ const AdminLayout = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background overflow-hidden">
       <aside className="w-60 border-r flex flex-col bg-card shrink-0">
         <div className="p-4 border-b flex items-center gap-3">
           <div className="p-2 bg-primary rounded-lg">
@@ -71,7 +71,7 @@ const AdminLayout = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto min-h-screen">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>
