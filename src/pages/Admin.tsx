@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Users, LogOut, Activity, Plus, Pencil } from 'lucide-react';
+import { Package, Users, LogOut, Activity, Plus, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -46,6 +46,8 @@ const Admin = () => {
   const [cargas, setCargas] = useState<Carga[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const ITENS_POR_PAGINA = 15;
 
   // Estados do Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -173,9 +175,15 @@ const Admin = () => {
     }
   };
 
+  const totalPaginas = Math.ceil(cargas.length / ITENS_POR_PAGINA);
+  const cargasPaginadas = cargas.slice(
+    (paginaAtual - 1) * ITENS_POR_PAGINA,
+    paginaAtual * ITENS_POR_PAGINA
+  );
+
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <header className="flex items-center justify-between mb-8">
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-30 bg-background border-b shadow-sm px-4 md:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary rounded-lg">
             <Activity className="h-6 w-6 text-primary-foreground" />
@@ -190,6 +198,7 @@ const Admin = () => {
           Sair
         </Button>
       </header>
+      <div className="p-4 md:p-8">
 
       <Tabs defaultValue="cargas" className="space-y-4">
         <TabsList>
@@ -216,35 +225,65 @@ const Admin = () => {
               ) : cargas.length === 0 ? (
                 <p className="text-muted-foreground">Nenhuma carga sincronizada ou finalizada ainda.</p>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ordem</TableHead>
-                        <TableHead>Placa</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Última Atualização</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cargas.map((carga) => (
-                        <TableRow 
-                          key={carga.id} 
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => handleVerDetalhesCarga(carga.id)}
-                        >
-                          <TableCell className="font-medium">#{carga.id}</TableCell>
-                          <TableCell>{carga.placa || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant={carga.status === 'finalizada' ? 'default' : 'secondary'}>
-                              {carga.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">{formatarData(carga.atualizado_em)}</TableCell>
+                <div className="space-y-3">
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Ordem</TableHead>
+                          <TableHead>Placa</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Última Atualização</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {cargasPaginadas.map((carga) => (
+                          <TableRow
+                            key={carga.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => handleVerDetalhesCarga(carga.id)}
+                          >
+                            <TableCell className="font-medium">#{carga.id}</TableCell>
+                            <TableCell>{carga.placa || '-'}</TableCell>
+                            <TableCell>
+                              <Badge variant={carga.status === 'finalizada' ? 'default' : 'secondary'}>
+                                {carga.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">{formatarData(carga.atualizado_em)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {totalPaginas > 1 && (
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>
+                        {(paginaAtual - 1) * ITENS_POR_PAGINA + 1}–{Math.min(paginaAtual * ITENS_POR_PAGINA, cargas.length)} de {cargas.length} cargas
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPaginaAtual(p => p - 1)}
+                          disabled={paginaAtual === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="px-2 font-medium text-foreground">
+                          {paginaAtual} / {totalPaginas}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPaginaAtual(p => p + 1)}
+                          disabled={paginaAtual === totalPaginas}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -493,6 +532,7 @@ const Admin = () => {
           </form>
         </DialogContent>
       </Dialog>
+    </div>{/* p-4 md:p-8 */}
     </div>
   );
 };
