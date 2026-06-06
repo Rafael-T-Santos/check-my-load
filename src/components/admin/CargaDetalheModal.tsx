@@ -80,6 +80,7 @@ interface ErpItem {
   nomeMotorista: string;
   doca: number;
   horaSaida: string;
+  placa?: string;
 }
 
 type StatusConferencia = 'conferido' | 'pendente' | 'divergente' | 'excedente' | 'sem_previsao';
@@ -144,6 +145,7 @@ interface Props {
 const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const [localData, setLocalData] = useState<{ produtos: ProdutoDB[]; fotos: FotoDB[] } | null>(null);
   const [cargaStatus, setCargaStatus] = useState(carga.status);
+  const [placaAtual, setPlacaAtual] = useState(carga.placa);
   const [finalizando, setFinalizando] = useState(false);
   const [showConfirmFinalizar, setShowConfirmFinalizar] = useState(false);
   const [motivoAdmin, setMotivoAdmin] = useState('');
@@ -205,6 +207,13 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
           const data = await res.json();
           if (data.sucesso && Array.isArray(data.dados)) {
             setErpData(data.dados);
+            const placaErp = data.dados[0]?.placa;
+            if (placaErp && placaErp !== carga.placa) {
+              fetch(`http://192.168.255.6:3000/admin/cargas/${carga.id}/sincronizar-placa`, { method: 'POST' })
+                .then(r => r.ok ? r.json() : null)
+                .then(result => { if (result?.placa) setPlacaAtual(result.placa); })
+                .catch(() => {});
+            }
           } else {
             setErpError(true);
           }
@@ -441,7 +450,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                 )}
               </DialogTitle>
               <DialogDescription className="flex flex-wrap gap-4 text-xs mt-1">
-                {carga.placa && <span>Placa: <strong className="text-foreground">{carga.placa}</strong></span>}
+                {placaAtual && <span>Placa: <strong className="text-foreground">{placaAtual}</strong></span>}
                 {erpInfo?.motorista && <span>Motorista: <strong className="text-foreground">{erpInfo.motorista}</strong></span>}
                 {erpInfo?.doca != null && <span>Doca: <strong className="text-foreground">{erpInfo.doca}</strong></span>}
                 {erpInfo?.horaSaida && <span>Saída: <strong className="text-foreground">{formatarData(erpInfo.horaSaida)}</strong></span>}

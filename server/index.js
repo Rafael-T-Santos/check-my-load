@@ -58,7 +58,7 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
                                       atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
@@ -130,7 +130,7 @@ app.post('/cargas/:id/fotos', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
                                       atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
@@ -286,7 +286,7 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
 
     const cargaResult = await pool.query(
       `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(conferencias_cargas.placa, EXCLUDED.placa),
+       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
                                       atualizado_em = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS inserido`,
       [id, placa || null]
@@ -560,6 +560,33 @@ app.post('/sacolas/etiqueta-cliente', async (req, res) => {
   } catch (err) {
     console.error('Erro ao buscar cliente para etiqueta:', err);
     res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Sincronizar placa de uma carga a partir do ERP
+app.post('/admin/cargas/:id/sincronizar-placa', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const erpRes = await fetch('http://192.168.255.6:5000/api/consultar-ordem-carga', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ordemCarga: Number(id) }),
+    });
+    if (!erpRes.ok) return res.status(503).json({ error: 'ERP indisponível' });
+    const erpData = await erpRes.json();
+    if (!erpData.sucesso || !Array.isArray(erpData.dados) || !erpData.dados[0]?.placa) {
+      return res.status(404).json({ error: 'Placa não encontrada no ERP' });
+    }
+    const novaPlaca = erpData.dados[0].placa;
+    const result = await pool.query(
+      'UPDATE conferencias_cargas SET placa = $1, atualizado_em = CURRENT_TIMESTAMP WHERE id = $2 RETURNING placa',
+      [novaPlaca, id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Carga não encontrada' });
+    res.json({ sucesso: true, placa: novaPlaca });
+  } catch (err) {
+    console.error('Erro ao sincronizar placa:', err);
+    res.status(500).json({ error: 'Erro ao sincronizar placa' });
   }
 });
 
