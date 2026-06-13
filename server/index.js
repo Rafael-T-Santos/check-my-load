@@ -729,7 +729,7 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
 // Finalizar contagem de estoque (envia ao Sankhya + marca como finalizada)
 app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
   const { nucontagem } = req.params;
-  const { usuario_id } = req.body;
+  const { usuario_id, total_itens } = req.body;
   const uid = usuario_id || 1;
 
   try {
@@ -743,6 +743,13 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
 
     if (itenResult.rows.length === 0) {
       return res.status(400).json({ error: 'Nenhum item contado para finalizar' });
+    }
+
+    // Valida se todos os itens do app chegaram ao banco antes de finalizar
+    if (total_itens !== undefined && itenResult.rows.length < Number(total_itens)) {
+      return res.status(400).json({
+        error: `Sincronização incompleta: ${itenResult.rows.length} de ${total_itens} itens salvos no banco. Sincronize e tente novamente.`,
+      });
     }
 
     const contagemId       = itenResult.rows[0].contagem_id;

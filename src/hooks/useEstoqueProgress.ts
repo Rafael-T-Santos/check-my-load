@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { ContagemPendente, ItemEstoque, EstoqueStep } from '@/types/estoque';
 
@@ -19,13 +19,15 @@ export function useEstoqueProgress() {
   const [loadingItens, setLoadingItens] = useState(false);
   const [loadingSync, setLoadingSync] = useState(false);
 
+  // Guard: impede syncs concorrentes (task #3)
+  const syncingRef = useRef(false);
+
   const carregarContagens = useCallback(async () => {
     setLoadingContagens(true);
     try {
       const res = await fetch('http://192.168.255.6:3000/sankhya/contagens-pendentes');
       if (!res.ok) throw new Error('Falha ao buscar contagens');
       const raw = await res.json();
-      // Sankhya pode retornar { sucesso: true, dados: [...] } ou diretamente []
       const lista = Array.isArray(raw) ? raw : (raw.dados ?? []);
       setContagens(lista);
     } finally {
@@ -43,7 +45,6 @@ export function useEstoqueProgress() {
       });
       if (!res.ok) throw new Error('Falha ao buscar itens da contagem');
       const rawItens = await res.json();
-      // Normaliza: Sankhya pode retornar { sucesso: true, dados: [...] } ou diretamente []
       const sankhyaItens: any[] = Array.isArray(rawItens) ? rawItens : (rawItens.dados ?? []);
 
       let progressoDB: any[] = [];
@@ -89,14 +90,25 @@ export function useEstoqueProgress() {
     );
   }, []);
 
-  const syncWithServer = useCallback(async (itensAtual?: ItemEstoque[], contagemAtualParam?: ContagemPendente | null) => {
+  // silent=true suprime toasts (usado internamente por recarregarItens — task #8)
+  // itensAtual permite passar estado atualizado antes do React processar o setState (task #1)
+  const syncWithServer = useCallback(async (
+    itensAtual?: ItemEstoque[],
+    contagemAtualParam?: ContagemPendente | null,
+    silent = false,
+  ) => {
     const contagem = contagemAtualParam !== undefined ? contagemAtualParam : contagemAtual;
     if (!contagem) return;
+
+    // Guard contra syncs concorrentes (task #3)
+    if (syncingRef.current) return;
+
     if (!navigator.onLine) {
-      toast.warning('Sem conexão', { description: 'Dados salvos localmente. Sincronizaremos quando a rede voltar.' });
+      if (!silent) toast.warning('Sem conexão', { description: 'Dados salvos localmente. Sincronizaremos quando a rede voltar.' });
       return;
     }
 
+    syncingRef.current = true;
     try {
       const itensSalvar = (itensAtual ?? itens)
         .filter(i => i.contado && i.estoquecontagem !== null)
@@ -135,7 +147,9 @@ export function useEstoqueProgress() {
       }
     } catch (err) {
       console.error('Erro na sincronização de estoque:', err);
-      toast.warning('Conexão fraca', { description: 'Não foi possível sincronizar agora.' });
+      if (!silent) toast.warning('Conexão fraca', { description: 'Não foi possível sincronizar agora.' });
+    } finally {
+      syncingRef.current = false;
     }
   }, [contagemAtual, itens]);
 
@@ -150,7 +164,8 @@ export function useEstoqueProgress() {
 
     setLoadingSync(true);
     try {
-      await syncWithServer();
+      // silent=true evita toast duplicado se syncWithServer falhar (task #8)
+      await syncWithServer(undefined, undefined, true);
 
       const res = await fetch('http://192.168.255.6:3000/sankhya/itens-contagem', {
         method: 'POST',
@@ -201,11 +216,17 @@ export function useEstoqueProgress() {
     const res = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagemAtual.nucontagem}/finalizar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usuario_id: getLoggedUserId() }),
+      body: JSON.stringify({
+        usuario_id:  getLoggedUserId(),
+        total_itens: itens.length, // task #4: backend valida se todos estão no banco
+      }),
     });
-    if (!res.ok) throw new Error('Falha ao finalizar contagem');
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || 'Falha ao finalizar contagem');
+    }
     setCurrentStep('concluido');
-  }, [contagemAtual, syncWithServer]);
+  }, [contagemAtual, syncWithServer, itens]);
 
   const limpar = useCallback(() => {
     setContagemAtual(null);

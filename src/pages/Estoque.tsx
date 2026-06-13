@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package, LogOut, BarChart3, Search, ChevronRight,
-  RefreshCw, CheckCircle, Loader2, ChevronLeft, ScanBarcode,
+  RefreshCw, CheckCircle, Loader2, ChevronLeft, ScanBarcode, AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,16 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEstoqueProgress } from '@/hooks/useEstoqueProgress';
 import { EstoqueVerificationModal } from '@/components/estoque/EstoqueVerificationModal';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { ItemEstoque, ContagemPendente } from '@/types/estoque';
 
 // ---------------------------------------------------------------------------
@@ -86,6 +96,7 @@ const Estoque = () => {
   const [search, setSearch]               = useState('');
   const [finalizando, setFinalizando]     = useState(false);
   const [itemSelecionado, setItemSelecionado] = useState<ItemEstoque | null>(null);
+  const [showBackConfirm, setShowBackConfirm] = useState(false); // task #6
 
   const usuario = (() => {
     try { return JSON.parse(localStorage.getItem('usuario') || '{}'); }
@@ -96,22 +107,39 @@ const Estoque = () => {
     carregarContagens().catch(() => toast.error('Erro ao carregar contagens pendentes'));
   }, [carregarContagens]);
 
+  // task #2: ref mantém syncWithServer sempre atualizado sem recriar o interval
+  const syncWithServerRef = useRef(syncWithServer);
+  useEffect(() => { syncWithServerRef.current = syncWithServer; }, [syncWithServer]);
+
   useEffect(() => {
     if (currentStep !== 'contar-itens') return;
-    const id = setInterval(() => syncWithServer(), 30_000);
+    const id = setInterval(() => syncWithServerRef.current(), 30_000);
     return () => clearInterval(id);
-  }, [currentStep, syncWithServer]);
+  }, [currentStep]); // sem syncWithServer nas deps — interval não é mais resetado
 
   const handleLogout = () => {
     localStorage.removeItem('usuario');
     navigate('/');
   };
 
-  const handleBack = useCallback(async () => {
+  // task #6: pede confirmação se há itens contados
+  const handleBack = async () => {
+    const { contados } = getStats();
+    if (contados > 0) {
+      setShowBackConfirm(true);
+      return;
+    }
     await syncWithServer();
     limpar();
     carregarContagens().catch(() => {});
-  }, [syncWithServer, limpar, carregarContagens]);
+  };
+
+  const confirmarBack = async () => {
+    setShowBackConfirm(false);
+    await syncWithServer();
+    limpar();
+    carregarContagens().catch(() => {});
+  };
 
   const handleSelecionarContagem = async (contagem: ContagemPendente) => {
     try {
@@ -121,10 +149,14 @@ const Estoque = () => {
     }
   };
 
+  // task #1: passa itens já atualizados para evitar race condition com setState
   const handleConfirmarItem = (codprod: string, qty: number) => {
     updateItem(codprod, qty);
+    const itensAtualizados = itens.map(i =>
+      i.codprod === codprod ? { ...i, estoquecontagem: qty, contado: true } : i
+    );
+    syncWithServer(itensAtualizados);
     toast.success('Item registrado', { description: `${qty} unidades contadas.` });
-    syncWithServer();
   };
 
   const handleFinalizar = async () => {
@@ -132,11 +164,19 @@ const Estoque = () => {
     try {
       await finalizar();
       toast.success('Contagem finalizada com sucesso!');
-    } catch {
-      toast.error('Erro ao finalizar contagem. Verifique a conexão com o servidor.');
+    } catch (err: any) {
+      toast.error('Erro ao finalizar contagem.', {
+        description: err?.message || 'Verifique a conexão com o servidor.',
+      });
     } finally {
       setFinalizando(false);
     }
+  };
+
+  // task #5: fecha modal antes de recarregarItens atualizar a lista
+  const handleSincronizar = async () => {
+    setItemSelecionado(null);
+    await recarregarItens();
   };
 
   const stats = getStats();
@@ -255,6 +295,14 @@ const Estoque = () => {
   if (currentStep === 'contar-itens') {
     const pct = stats.total > 0 ? (stats.contados / stats.total) * 100 : 0;
 
+    // task #7: label contextual do botão Finalizar
+    const finalizarLabel = (() => {
+      if (finalizando) return null;
+      if (stats.total === 0) return 'Sem itens';
+      if (stats.contados < stats.total) return `Faltam ${stats.restantes}`;
+      return 'Finalizar';
+    })();
+
     return (
       <div className="min-h-screen bg-background flex flex-col">
         {renderHeader()}
@@ -297,9 +345,16 @@ const Estoque = () => {
             <div className="flex justify-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
+          ) : itens.length === 0 ? (
+            // task #7: lista vazia vinda do Sankhya
+            <div className="text-center py-16 text-muted-foreground">
+              <AlertTriangle className="h-10 w-10 mx-auto mb-3 opacity-40" />
+              <p className="font-medium">Nenhum item nesta contagem</p>
+              <p className="text-sm mt-1">O Sankhya não retornou itens para esta contagem</p>
+            </div>
           ) : itensFiltrados.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              <p>Nenhum item encontrado</p>
+              <p>Nenhum item encontrado para "{search}"</p>
             </div>
           ) : (
             itensFiltrados.map(item => (
@@ -314,7 +369,7 @@ const Estoque = () => {
 
         {/* Rodapé */}
         <div className="border-t px-4 py-3 bg-card flex gap-3 shrink-0">
-          <Button variant="outline" className="flex-1" onClick={recarregarItens} disabled={loadingSync}>
+          <Button variant="outline" className="flex-1" onClick={handleSincronizar} disabled={loadingSync}>
             <RefreshCw className={cn('h-4 w-4 mr-2', loadingSync && 'animate-spin')} />
             Sincronizar
           </Button>
@@ -327,7 +382,7 @@ const Estoque = () => {
               ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               : <CheckCircle className="h-4 w-4 mr-2" />
             }
-            Finalizar
+            {finalizarLabel}
           </Button>
         </div>
 
@@ -338,6 +393,23 @@ const Estoque = () => {
           onClose={() => setItemSelecionado(null)}
           onConfirm={handleConfirmarItem}
         />
+
+        {/* task #6: confirmação ao voltar com itens contados */}
+        <AlertDialog open={showBackConfirm} onOpenChange={setShowBackConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sair da contagem?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Você tem {stats.contados} item(ns) contado(s). O progresso será salvo antes de sair,
+                mas você precisará continuar a contagem depois.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Continuar contando</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmarBack}>Salvar e sair</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
