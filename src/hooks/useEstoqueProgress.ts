@@ -23,7 +23,10 @@ export function useEstoqueProgress() {
     try {
       const res = await fetch('http://192.168.255.6:3000/sankhya/contagens-pendentes');
       if (!res.ok) throw new Error('Falha ao buscar contagens');
-      setContagens(await res.json());
+      const raw = await res.json();
+      // Sankhya pode retornar { sucesso: true, dados: [...] } ou diretamente []
+      const lista = Array.isArray(raw) ? raw : (raw.dados ?? []);
+      setContagens(lista);
     } finally {
       setLoadingContagens(false);
     }
@@ -38,7 +41,9 @@ export function useEstoqueProgress() {
         body: JSON.stringify({ nuContagem: contagem.nucontagem }),
       });
       if (!res.ok) throw new Error('Falha ao buscar itens da contagem');
-      const sankhyaItens: any[] = await res.json();
+      const rawItens = await res.json();
+      // Normaliza: Sankhya pode retornar { sucesso: true, dados: [...] } ou diretamente []
+      const sankhyaItens: any[] = Array.isArray(rawItens) ? rawItens : (rawItens.dados ?? []);
 
       let progressoDB: any[] = [];
       try {
