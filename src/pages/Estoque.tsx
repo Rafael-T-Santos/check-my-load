@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Package, LogOut, BarChart3, Search, ChevronRight,
-  RefreshCw, CheckCircle, Loader2, ChevronLeft,
+  RefreshCw, CheckCircle, Loader2, ChevronLeft, ScanBarcode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,75 +11,54 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEstoqueProgress } from '@/hooks/useEstoqueProgress';
+import { EstoqueVerificationModal } from '@/components/estoque/EstoqueVerificationModal';
 import type { ItemEstoque, ContagemPendente } from '@/types/estoque';
 
 // ---------------------------------------------------------------------------
-// ItemCard
+// ItemCard — card clicável, sem mostrar estoque atual
 // ---------------------------------------------------------------------------
 const ItemCard = ({
   item,
-  onUpdate,
+  onClick,
 }: {
   item: ItemEstoque;
-  onUpdate: (codprod: string, qty: number) => void;
-}) => {
-  const [localValue, setLocalValue] = useState<string>(
-    item.estoquecontagem?.toString() ?? ''
-  );
-  const isFocused = useRef(false);
-
-  useEffect(() => {
-    if (!isFocused.current) {
-      setLocalValue(item.estoquecontagem?.toString() ?? '');
-    }
-  }, [item.estoquecontagem]);
-
-  const handleBlur = () => {
-    isFocused.current = false;
-    const num = parseFloat(localValue.replace(',', '.'));
-    if (!isNaN(num) && num >= 0) {
-      onUpdate(item.codprod, num);
-    }
-  };
-
-  return (
-    <Card className={cn('transition-colors', item.contado && 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20')}>
-      <CardContent className="p-4 flex items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="font-mono text-xs text-muted-foreground">{item.codprod}</span>
-            {item.contado && <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
-          </div>
-          <p className="font-medium text-sm leading-tight">{item.descrprod}</p>
-          {item.referencia && (
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">{item.referencia}</p>
-          )}
-          <p className="text-xs text-muted-foreground mt-1">
-            Estoque atual:{' '}
-            <span className="font-semibold text-foreground">{item.estoqueatual ?? '-'}</span>
+  onClick: () => void;
+}) => (
+  <Card
+    className={cn(
+      'cursor-pointer transition-colors active:scale-[0.99]',
+      item.contado
+        ? 'border-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/20'
+        : 'hover:border-primary/50',
+    )}
+    onClick={onClick}
+  >
+    <CardContent className="p-4 flex items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="font-mono text-xs text-muted-foreground">{item.codprod}</span>
+          {item.contado && <CheckCircle className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+        </div>
+        <p className="font-medium text-sm leading-tight truncate">{item.descrprod}</p>
+        {item.referencia && (
+          <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{item.referencia}</p>
+        )}
+        {item.contado && item.estoquecontagem !== null && (
+          <p className="text-xs text-emerald-600 font-semibold mt-1">
+            Contado: {item.estoquecontagem}
           </p>
-        </div>
+        )}
+      </div>
 
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="text-xs text-muted-foreground">Contado</span>
-          <Input
-            type="number"
-            inputMode="decimal"
-            className="w-24 text-right"
-            value={localValue}
-            placeholder="0"
-            onChange={e => setLocalValue(e.target.value)}
-            onFocus={() => { isFocused.current = true; }}
-            onBlur={handleBlur}
-            onKeyDown={e => {
-              if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
-            }}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+      <div className="shrink-0 flex flex-col items-center gap-1 text-muted-foreground">
+        {item.hasBarcode
+          ? <ScanBarcode className="h-4 w-4" />
+          : <ChevronRight className="h-4 w-4" />
+        }
+      </div>
+    </CardContent>
+  </Card>
+);
 
 // ---------------------------------------------------------------------------
 // Estoque page
@@ -102,8 +81,9 @@ const Estoque = () => {
     getStats,
   } = useEstoqueProgress();
 
-  const [search, setSearch] = useState('');
-  const [finalizando, setFinalizando] = useState(false);
+  const [search, setSearch]               = useState('');
+  const [finalizando, setFinalizando]     = useState(false);
+  const [itemSelecionado, setItemSelecionado] = useState<ItemEstoque | null>(null);
 
   const usuario = (() => {
     try { return JSON.parse(localStorage.getItem('usuario') || '{}'); }
@@ -139,6 +119,11 @@ const Estoque = () => {
     }
   };
 
+  const handleConfirmarItem = (codprod: string, qty: number) => {
+    updateItem(codprod, qty);
+    toast.success('Item registrado', { description: `${qty} unidades contadas.` });
+  };
+
   const handleFinalizar = async () => {
     setFinalizando(true);
     try {
@@ -163,6 +148,9 @@ const Estoque = () => {
     );
   });
 
+  // ---------------------------------------------------------------------------
+  // Header comum
+  // ---------------------------------------------------------------------------
   const renderHeader = () => (
     <header className="border-b px-4 py-3 flex items-center justify-between bg-card shrink-0">
       <div className="flex items-center gap-2">
@@ -189,7 +177,9 @@ const Estoque = () => {
     </header>
   );
 
+  // ---------------------------------------------------------------------------
   // Passo 1 — Selecionar contagem
+  // ---------------------------------------------------------------------------
   if (currentStep === 'selecionar-contagem') {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -256,7 +246,9 @@ const Estoque = () => {
     );
   }
 
+  // ---------------------------------------------------------------------------
   // Passo 2 — Contar itens
+  // ---------------------------------------------------------------------------
   if (currentStep === 'contar-itens') {
     const pct = stats.total > 0 ? (stats.contados / stats.total) * 100 : 0;
 
@@ -264,8 +256,9 @@ const Estoque = () => {
       <div className="min-h-screen bg-background flex flex-col">
         {renderHeader()}
 
+        {/* Barra de progresso */}
         <div className="bg-card border-b px-4 py-3 shrink-0">
-          <div className="flex items-center justify-between text-sm mb-2">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-muted-foreground text-xs">
               {contagemAtual?.descricao_marca}
               {contagemAtual?.codlocal && ` · Local ${contagemAtual.codlocal}`}
@@ -282,6 +275,7 @@ const Estoque = () => {
           </div>
         </div>
 
+        {/* Busca */}
         <div className="px-4 py-3 border-b bg-card shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -294,6 +288,7 @@ const Estoque = () => {
           </div>
         </div>
 
+        {/* Lista de itens */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {loadingItens ? (
             <div className="flex justify-center py-16">
@@ -305,17 +300,18 @@ const Estoque = () => {
             </div>
           ) : (
             itensFiltrados.map(item => (
-              <ItemCard key={item.codprod} item={item} onUpdate={updateItem} />
+              <ItemCard
+                key={item.codprod}
+                item={item}
+                onClick={() => setItemSelecionado(item)}
+              />
             ))
           )}
         </div>
 
+        {/* Rodapé */}
         <div className="border-t px-4 py-3 bg-card flex gap-3 shrink-0">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={() => syncWithServer()}
-          >
+          <Button variant="outline" className="flex-1" onClick={() => syncWithServer()}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Sincronizar
           </Button>
@@ -331,11 +327,21 @@ const Estoque = () => {
             Finalizar
           </Button>
         </div>
+
+        {/* Modal de verificação */}
+        <EstoqueVerificationModal
+          item={itemSelecionado}
+          isOpen={!!itemSelecionado}
+          onClose={() => setItemSelecionado(null)}
+          onConfirm={handleConfirmarItem}
+        />
       </div>
     );
   }
 
+  // ---------------------------------------------------------------------------
   // Passo 3 — Concluído
+  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {renderHeader()}

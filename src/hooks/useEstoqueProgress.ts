@@ -57,14 +57,16 @@ export function useEstoqueProgress() {
         const codprod = item.codprod.toString();
         const salvo   = progressoDB.find((p: any) => p.codprod === codprod);
         return {
-          nucontagem:     item.nucontagem,
-          sequencia:      item.sequencia,
+          nucontagem:      item.nucontagem,
+          sequencia:       item.sequencia,
           codprod,
-          descrprod:      item.descrprod,
-          referencia:     item.referencia,
-          estoqueatual:   item.estoqueatual,
+          descrprod:       item.descrprod,
+          referencia:      item.referencia ?? '',
+          referencia2:     item.ad_referencia2 ?? undefined,
+          hasBarcode:      item.ad_validabarra === 'S',
+          estoqueatual:    item.estoqueatual,
           estoquecontagem: salvo ? salvo.estoque_contagem : null,
-          contado:        !!salvo,
+          contado:         !!salvo,
         };
       });
 

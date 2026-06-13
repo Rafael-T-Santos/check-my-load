@@ -15,6 +15,8 @@ export interface ItemEstoque {
   codprod: string;
   descrprod: string;
   referencia: string;
+  referencia2?: string;
+  hasBarcode: boolean;
   estoqueatual: number;
   estoquecontagem: number | null;
   contado: boolean;
