@@ -72,10 +72,12 @@ const Estoque = () => {
     currentStep,
     loadingContagens,
     loadingItens,
+    loadingSync,
     carregarContagens,
     selecionarContagem,
     updateItem,
     syncWithServer,
+    recarregarItens,
     finalizar,
     limpar,
     getStats,
@@ -122,6 +124,7 @@ const Estoque = () => {
   const handleConfirmarItem = (codprod: string, qty: number) => {
     updateItem(codprod, qty);
     toast.success('Item registrado', { description: `${qty} unidades contadas.` });
+    syncWithServer();
   };
 
   const handleFinalizar = async () => {
@@ -311,14 +314,14 @@ const Estoque = () => {
 
         {/* Rodapé */}
         <div className="border-t px-4 py-3 bg-card flex gap-3 shrink-0">
-          <Button variant="outline" className="flex-1" onClick={() => syncWithServer()}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <Button variant="outline" className="flex-1" onClick={recarregarItens} disabled={loadingSync}>
+            <RefreshCw className={cn('h-4 w-4 mr-2', loadingSync && 'animate-spin')} />
             Sincronizar
           </Button>
           <Button
             className="flex-1"
             onClick={handleFinalizar}
-            disabled={finalizando || stats.contados === 0}
+            disabled={finalizando || stats.total === 0 || stats.contados < stats.total}
           >
             {finalizando
               ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -17,6 +17,7 @@ export function useEstoqueProgress() {
   const [currentStep, setCurrentStep] = useState<EstoqueStep>('selecionar-contagem');
   const [loadingContagens, setLoadingContagens] = useState(false);
   const [loadingItens, setLoadingItens] = useState(false);
+  const [loadingSync, setLoadingSync] = useState(false);
 
   const carregarContagens = useCallback(async () => {
     setLoadingContagens(true);
@@ -138,6 +139,61 @@ export function useEstoqueProgress() {
     }
   }, [contagemAtual, itens]);
 
+  // Sincronização completa: salva progresso no DB e re-busca a lista de itens do Sankhya.
+  // Itens removidos do Sankhya somem; itens novos aparecem; quantidades do DB são preservadas.
+  const recarregarItens = useCallback(async () => {
+    if (!contagemAtual) return;
+    if (!navigator.onLine) {
+      toast.warning('Sem conexão', { description: 'Sincronização indisponível sem internet.' });
+      return;
+    }
+
+    setLoadingSync(true);
+    try {
+      await syncWithServer();
+
+      const res = await fetch('http://192.168.255.6:3000/sankhya/itens-contagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nuContagem: contagemAtual.nucontagem }),
+      });
+      if (!res.ok) throw new Error('Falha ao buscar itens');
+      const rawItens = await res.json();
+      const sankhyaItens: any[] = Array.isArray(rawItens) ? rawItens : (rawItens.dados ?? []);
+
+      let progressoDB: any[] = [];
+      const dbRes = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagemAtual.nucontagem}/progresso`);
+      if (dbRes.ok) progressoDB = await dbRes.json();
+
+      const itensMesclados: ItemEstoque[] = sankhyaItens.map(item => {
+        const codprod = item.codprod.toString();
+        const salvo   = progressoDB.find((p: any) => p.codprod === codprod);
+        return {
+          nucontagem:      item.nucontagem,
+          sequencia:       item.sequencia,
+          codprod,
+          descrprod:       item.descrprod,
+          referencia:      item.referencia ?? '',
+          referencia2:     item.ad_referencia2 ?? undefined,
+          hasBarcode:      item.ad_validabarra === 'S',
+          estoqueatual:    item.estoqueatual,
+          estoquecontagem: salvo ? salvo.estoque_contagem : null,
+          contado:         !!salvo,
+        };
+      });
+
+      setItens(itensMesclados);
+      toast.success('Lista atualizada', {
+        description: `${itensMesclados.length} itens carregados do Sankhya.`,
+      });
+    } catch (err) {
+      console.error('Erro ao recarregar itens:', err);
+      toast.error('Erro ao sincronizar', { description: 'Não foi possível buscar itens do Sankhya.' });
+    } finally {
+      setLoadingSync(false);
+    }
+  }, [contagemAtual, syncWithServer]);
+
   const finalizar = useCallback(async () => {
     if (!contagemAtual) return;
     await syncWithServer();
@@ -171,10 +227,12 @@ export function useEstoqueProgress() {
     currentStep,
     loadingContagens,
     loadingItens,
+    loadingSync,
     carregarContagens,
     selecionarContagem,
     updateItem,
     syncWithServer,
+    recarregarItens,
     finalizar,
     limpar,
     getStats,

@@ -660,6 +660,7 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (nucontagem) DO UPDATE
          SET descricao_marca = COALESCE(EXCLUDED.descricao_marca, contagens_estoque.descricao_marca),
+             status          = 'em_andamento',
              atualizado_em   = CURRENT_TIMESTAMP
        RETURNING id, (xmax = 0) AS inserido`,
       [nucontagem, contagem?.codigo || null, contagem?.descricao_marca || null, contagem?.codlocal || null, uid]
