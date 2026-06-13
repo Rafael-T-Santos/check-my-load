@@ -590,5 +590,251 @@ app.post('/admin/cargas/:id/sincronizar-placa', async (req, res) => {
   }
 });
 
+// ------------------------------------------------------------------
+// ROTAS DE CONTAGEM DE ESTOQUE
+// ------------------------------------------------------------------
+
+const SANKHYA_URL = 'http://192.168.255.6:5000';
+
+// Proxy: buscar contagens pendentes no Sankhya
+app.get('/sankhya/contagens-pendentes', async (req, res) => {
+  try {
+    const erpRes = await fetch(`${SANKHYA_URL}/api/contagens-pendentes`);
+    if (!erpRes.ok) return res.status(502).json({ error: 'ERP indisponível' });
+    const data = await erpRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Erro ao buscar contagens pendentes:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Proxy: buscar itens de uma contagem no Sankhya
+app.post('/sankhya/itens-contagem', async (req, res) => {
+  const { nuContagem } = req.body;
+  if (!nuContagem) return res.status(400).json({ error: 'nuContagem é obrigatório' });
+  try {
+    const erpRes = await fetch(`${SANKHYA_URL}/api/itens-contagem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nuContagem }),
+    });
+    if (!erpRes.ok) return res.status(502).json({ error: 'ERP indisponível' });
+    const data = await erpRes.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Erro ao buscar itens da contagem:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Buscar progresso salvo da contagem de estoque
+app.get('/estoque/contagens/:nucontagem/progresso', async (req, res) => {
+  const { nucontagem } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT cep.codprod, cep.estoque_contagem::FLOAT as estoque_contagem, cep.sequencia
+       FROM contagens_estoque_produtos cep
+       JOIN contagens_estoque ce ON ce.id = cep.contagem_id
+       WHERE ce.nucontagem = $1`,
+      [nucontagem]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erro ao buscar progresso do estoque:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Sincronizar itens contados no banco local
+app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
+  const { nucontagem } = req.params;
+  const { itens, usuario_id, contagem } = req.body;
+  const uid = usuario_id || 1;
+
+  try {
+    await pool.query('BEGIN');
+
+    const contagemResult = await pool.query(
+      `INSERT INTO contagens_estoque (nucontagem, codigo, descricao_marca, codlocal, usuario_id)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (nucontagem) DO UPDATE
+         SET descricao_marca = COALESCE(EXCLUDED.descricao_marca, contagens_estoque.descricao_marca),
+             atualizado_em   = CURRENT_TIMESTAMP
+       RETURNING id, (xmax = 0) AS inserido`,
+      [nucontagem, contagem?.codigo || null, contagem?.descricao_marca || null, contagem?.codlocal || null, uid]
+    );
+
+    const contagemId   = contagemResult.rows[0].id;
+    const contagemNova = contagemResult.rows[0].inserido === true;
+
+    const qtdAnteriorResult = await pool.query(
+      `SELECT codprod, estoque_contagem::FLOAT FROM contagens_estoque_produtos WHERE contagem_id = $1`,
+      [contagemId]
+    );
+    const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.codprod, r.estoque_contagem]));
+
+    for (const item of itens) {
+      const qtdAnterior = qtdAnteriorMap.get(item.codprod) ?? null;
+      const qtdMudou    = qtdAnterior === null || qtdAnterior !== Number(item.estoquecontagem);
+
+      await pool.query(
+        `INSERT INTO contagens_estoque_produtos
+           (contagem_id, nucontagem, sequencia, codprod, descrprod, referencia,
+            estoque_atual, estoque_contagem, conferido_por_usuario_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (contagem_id, codprod) DO UPDATE SET
+           estoque_contagem         = EXCLUDED.estoque_contagem,
+           conferido_por_usuario_id = CASE
+             WHEN contagens_estoque_produtos.estoque_contagem IS DISTINCT FROM EXCLUDED.estoque_contagem
+             THEN EXCLUDED.conferido_por_usuario_id
+             ELSE contagens_estoque_produtos.conferido_por_usuario_id
+           END,
+           atualizado_em = CURRENT_TIMESTAMP`,
+        [contagemId, nucontagem, item.sequencia, item.codprod, item.descrprod,
+         item.referencia, item.estoqueatual, item.estoquecontagem, uid]
+      );
+
+      if (qtdMudou) {
+        await pool.query(
+          `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
+           VALUES ($1, $2, $3, $4)`,
+          [contagemId, uid, 'item_contado', JSON.stringify({
+            codprod:      item.codprod,
+            qtd_anterior: qtdAnterior,
+            qtd_nova:     item.estoquecontagem,
+          })]
+        );
+      }
+    }
+
+    if (contagemNova) {
+      await pool.query(
+        `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
+         VALUES ($1, $2, $3, $4)`,
+        [contagemId, uid, 'contagem_aberta', JSON.stringify({})]
+      );
+    }
+
+    await pool.query('COMMIT');
+    res.json({ sucesso: true });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Erro ao sincronizar contagem de estoque:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// Finalizar contagem de estoque (envia ao Sankhya + marca como finalizada)
+app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
+  const { nucontagem } = req.params;
+  const { usuario_id } = req.body;
+  const uid = usuario_id || 1;
+
+  try {
+    const itenResult = await pool.query(
+      `SELECT cep.codprod, cep.estoque_contagem::FLOAT as estoque_contagem, ce.id as contagem_id
+       FROM contagens_estoque_produtos cep
+       JOIN contagens_estoque ce ON ce.id = cep.contagem_id
+       WHERE ce.nucontagem = $1 AND cep.estoque_contagem IS NOT NULL`,
+      [nucontagem]
+    );
+
+    if (itenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Nenhum item contado para finalizar' });
+    }
+
+    const contagemId       = itenResult.rows[0].contagem_id;
+    const itensParaSankhya = itenResult.rows.map(r => ({
+      codProd:         Number(r.codprod),
+      estoqueContagem: r.estoque_contagem,
+    }));
+
+    const erpRes = await fetch(`${SANKHYA_URL}/api/registrar-contagem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nuContagem: Number(nucontagem), itens: itensParaSankhya }),
+    });
+
+    if (!erpRes.ok) {
+      const errBody = await erpRes.text();
+      console.error(`Sankhya /api/registrar-contagem retornou ${erpRes.status}:`, errBody);
+      return res.status(502).json({ error: 'Erro ao registrar contagem no ERP', detail: errBody });
+    }
+
+    await pool.query('BEGIN');
+    await pool.query(
+      `UPDATE contagens_estoque
+       SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP
+       WHERE nucontagem = $1`,
+      [nucontagem]
+    );
+    await pool.query(
+      `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
+       VALUES ($1, $2, $3, $4)`,
+      [contagemId, uid, 'contagem_finalizada',
+       JSON.stringify({ itens_enviados: itensParaSankhya.length })]
+    );
+    await pool.query('COMMIT');
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error('Erro ao finalizar contagem de estoque:', err);
+    res.status(500).json({ error: 'Erro ao finalizar contagem' });
+  }
+});
+
+// ------------------------------------------------------------------
+// ADMIN: CONTAGENS DE ESTOQUE
+// ------------------------------------------------------------------
+
+app.get('/admin/contagens-estoque', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ce.id, ce.nucontagem, ce.codigo, ce.descricao_marca, ce.codlocal,
+              ce.status, ce.criado_em, ce.atualizado_em, u.nome as usuario
+       FROM contagens_estoque ce
+       LEFT JOIN usuarios u ON u.id = ce.usuario_id
+       ORDER BY ce.atualizado_em DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erro ao buscar contagens de estoque (admin):', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+app.get('/admin/contagens-estoque/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const itens = await pool.query(
+      `SELECT cep.codprod, cep.descrprod, cep.referencia,
+              cep.estoque_atual::FLOAT    as estoque_atual,
+              cep.estoque_contagem::FLOAT as estoque_contagem,
+              cep.sequencia, cep.atualizado_em, u.nome as conferente
+       FROM contagens_estoque_produtos cep
+       LEFT JOIN usuarios u ON u.id = cep.conferido_por_usuario_id
+       WHERE cep.contagem_id = $1
+       ORDER BY cep.sequencia ASC NULLS LAST`,
+      [id]
+    );
+
+    const historico = await pool.query(
+      `SELECT h.acao, h.detalhes, h.criado_em, u.nome as usuario
+       FROM historico_contagens_estoque h
+       LEFT JOIN usuarios u ON u.id = h.usuario_id
+       WHERE h.contagem_id = $1
+       ORDER BY h.criado_em ASC`,
+      [id]
+    );
+
+    res.json({ itens: itens.rows, historico: historico.rows });
+  } catch (err) {
+    console.error('Erro ao buscar detalhes da contagem:', err);
+    res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`🚀 Backend rodando na porta ${PORT}`));

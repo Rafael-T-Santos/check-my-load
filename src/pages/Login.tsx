@@ -47,7 +47,7 @@ const Login = () => {
         if (data.usuario.perfil === 'admin') {
           navigate('/admin', { replace: true });
         } else {
-          navigate('/cargo', { replace: true });
+          navigate('/selecionar', { replace: true });
         }
       } else {
         toast.error(data.error || 'Matrícula ou senha inválidos');

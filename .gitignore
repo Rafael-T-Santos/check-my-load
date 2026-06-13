@@ -26,3 +26,7 @@ dist-ssr
 # Meus arquivos locais
 .dockerignore
 .env
+
+# Scripts gerados pelo Claude Code
+install.cmd
+PLANEJAMENTO_ESTOQUE.md

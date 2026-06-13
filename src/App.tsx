@@ -5,8 +5,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
+import Selecionar from "./pages/Selecionar";
+import Estoque from "./pages/Estoque";
 import AdminLayout from '@/pages/admin/AdminLayout';
 import AdminCargas from '@/pages/admin/AdminCargas';
+import AdminEstoque from '@/pages/admin/AdminEstoque';
 import AdminUsuarios from '@/pages/admin/AdminUsuarios';
 import NotFound from "./pages/NotFound";
 
@@ -23,7 +26,7 @@ const PublicRoute = ({ children }: { children: React.ReactElement }) => {
   const auth = localStorage.getItem('usuario');
   if (auth) {
     const user = JSON.parse(auth);
-    return <Navigate to={user.perfil === 'admin' ? '/admin' : '/cargo'} replace />;
+    return <Navigate to={user.perfil === 'admin' ? '/admin' : '/selecionar'} replace />;
   }
   return children;
 };
@@ -39,9 +42,12 @@ const App = () => (
           <Route path="/" element={<PublicRoute><Login /></PublicRoute>} />
           
           {/* Rotas Privadas (Protegidas) */}
-          <Route path="/cargo" element={<PrivateRoute><Index /></PrivateRoute>} />
+          <Route path="/selecionar" element={<PrivateRoute><Selecionar /></PrivateRoute>} />
+          <Route path="/cargo"      element={<PrivateRoute><Index /></PrivateRoute>} />
+          <Route path="/estoque"    element={<PrivateRoute><Estoque /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute><AdminLayout /></PrivateRoute>}>
             <Route index element={<AdminCargas />} />
+            <Route path="estoque"  element={<AdminEstoque />} />
             <Route path="usuarios" element={<AdminUsuarios />} />
           </Route>
           
