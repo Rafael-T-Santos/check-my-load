@@ -21,6 +21,7 @@ const Index = () => {
     updateProduct,
     addPhoto,
     addProductPhoto,
+    addOrderPhoto,
     updatePhotoObservation,
     removePhoto,
     addBag,
@@ -141,7 +142,7 @@ const Index = () => {
 
   // Photo capture screen
   if (currentStep === 'photos') {
-    const finalizationPhotos = photos.filter(p => !p.produtoCodigo);
+    const finalizationPhotos = photos.filter(p => !p.produtoCodigo && !p.pedidoId);
     return (
       <PhotoCapture
         cargoId={currentCargo.id}
@@ -184,6 +185,8 @@ const Index = () => {
         onProceedWithJustification={handleProceedWithJustification}
         onBack={clearCargo}
         allComplete={allBrandsComplete()}
+        photos={photos}
+        onAddOrderPhoto={addOrderPhoto}
       />
     );
   }

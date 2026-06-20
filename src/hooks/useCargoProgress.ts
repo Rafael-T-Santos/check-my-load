@@ -391,6 +391,29 @@ export function useCargoProgress() {
     }
   }, [currentCargo]);
 
+  const addOrderPhoto = useCallback(async (imageData: string, observation: string, pedidoId: string) => {
+    const newPhoto: PhotoRecord = {
+      id: `photo-pedido-${Date.now()}`,
+      imageData,
+      observation,
+      capturedAt: new Date().toISOString(),
+      pedidoId,
+    };
+    setPhotos(prev => [...prev, newPhoto]);
+
+    if (currentCargo) {
+      try {
+        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fotos: [newPhoto], usuario_id: getLoggedUserId() }),
+        });
+      } catch (e) {
+        console.error('Erro ao salvar foto do pedido:', e);
+      }
+    }
+  }, [currentCargo]);
+
   const updatePhotoObservation = useCallback((photoId: string, observation: string) => {
     setPhotos(prev =>
       prev.map(p => (p.id === photoId ? { ...p, observation } : p))
@@ -630,8 +653,8 @@ export function useCargoProgress() {
       // 1. Salva as últimas alterações dos produtos
       await saveProgressToDB();
 
-      // 2. Envia apenas fotos de finalização (produto já foram enviadas individualmente)
-      const fotosFinalizacao = photos.filter(p => !p.produtoCodigo);
+      // 2. Envia apenas fotos de finalização (produto e pedido já foram enviadas individualmente)
+      const fotosFinalizacao = photos.filter(p => !p.produtoCodigo && !p.pedidoId);
       if (fotosFinalizacao.length > 0) {
         await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
@@ -694,7 +717,7 @@ export function useCargoProgress() {
   }, [getStats]);
 
   const canFinalize = useCallback(() => {
-    return photos.filter(p => !p.produtoCodigo).length >= 5;
+    return photos.filter(p => !p.produtoCodigo && !p.pedidoId).length >= 5;
   }, [photos]);
 
   const allBrandsComplete = useCallback(() => {
@@ -721,6 +744,7 @@ export function useCargoProgress() {
     updateProduct,
     addPhoto,
     addProductPhoto,
+    addOrderPhoto,
     updatePhotoObservation,
     removePhoto,
     addBag,

@@ -6,10 +6,11 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Product, BrandStatus, Bag, OrderInfo, Cargo } from '@/types/cargo';
+import { Product, BrandStatus, Bag, OrderInfo, Cargo, PhotoRecord } from '@/types/cargo';
 import { BagCreationFlow } from './bags/BagCreationFlow';
 import { BagListModal } from './bags/BagListModal';
 import { CargoHeader } from '@/components/CargoHeader';
+import { OrderPhotosListModal } from './OrderPhotosListModal';
 
 interface BrandSelectionProps {
   cargo: Cargo;
@@ -31,6 +32,9 @@ interface BrandSelectionProps {
   getProductAvailability: (code: string) => { total: number; inBags: number; available: number };
   getOrdersForCargo: () => OrderInfo[];
   isBagCodeUsed: (code: string) => boolean;
+
+  photos: PhotoRecord[];
+  onAddOrderPhoto: (imageData: string, observation: string, pedidoId: string) => Promise<void>;
 }
 
 function getBrandWarnings(products: Product[], brand: string): number {
@@ -62,9 +66,12 @@ export function BrandSelection({
   getProductAvailability,
   getOrdersForCargo,
   isBagCodeUsed,
+  photos,
+  onAddOrderPhoto,
 }: BrandSelectionProps) {
   const [isBagFlowOpen, setIsBagFlowOpen] = useState(false);
   const [isBagListOpen, setIsBagListOpen] = useState(false);
+  const [isOrderPhotosOpen, setIsOrderPhotosOpen] = useState(false);
   const [showJustifyDialog, setShowJustifyDialog] = useState(false);
   const [justifyText, setJustifyText] = useState('');
   const [isSubmittingJustify, setIsSubmittingJustify] = useState(false);
@@ -89,6 +96,7 @@ export function BrandSelection({
   const overallProgress = totalProducts > 0 ? (totalChecked / totalProducts) * 100 : 0;
 
   const hasCheckedProducts = products.some(p => p.isChecked && p.checkedQuantity !== null && p.checkedQuantity > 0);
+  const orderPhotosCount = photos.filter(p => p.pedidoId).length;
 
   return (
     <div className="min-h-screen flex flex-col bg-background relative">
@@ -163,6 +171,20 @@ export function BrandSelection({
             )}
           </div>
         )}
+
+        <Button
+          onClick={() => setIsOrderPhotosOpen(true)}
+          variant="outline"
+          className="w-full h-12 border-dashed text-muted-foreground hover:text-foreground hover:border-primary/40 mb-2"
+        >
+          <Camera className="w-5 h-5 mr-2" />
+          Fotos de Pedidos
+          {orderPhotosCount > 0 && (
+            <span className="ml-2 bg-primary/10 text-primary text-xs font-semibold px-2 py-0.5 rounded-full">
+              {orderPhotosCount}
+            </span>
+          )}
+        </Button>
 
         <p className="text-sm text-muted-foreground mb-2">
           Selecione as marcas que deseja conferir:
@@ -359,7 +381,15 @@ export function BrandSelection({
         bags={bags}
         onRemoveBag={onRemoveBag}
       />
-      
+
+      <OrderPhotosListModal
+        isOpen={isOrderPhotosOpen}
+        orders={getOrdersForCargo()}
+        photos={photos}
+        onClose={() => setIsOrderPhotosOpen(false)}
+        onAddOrderPhoto={onAddOrderPhoto}
+      />
+
     </div>
   );
 }

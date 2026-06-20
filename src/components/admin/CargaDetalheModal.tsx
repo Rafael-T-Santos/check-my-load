@@ -48,6 +48,7 @@ interface FotoDB {
   conferente: string;
   capturado_em: string;
   produto_codigo?: string;
+  pedido_id?: string;
 }
 
 interface SacolaProduto {
@@ -773,11 +774,12 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
               <TabsContent value="fotos" className="mt-0">
                 {(() => {
                   const fotosProduto     = localData?.fotos.filter(f => f.produto_codigo) ?? [];
-                  const fotosFinalizacao = localData?.fotos.filter(f => !f.produto_codigo) ?? [];
+                  const fotosPedido      = localData?.fotos.filter(f => !f.produto_codigo && f.pedido_id) ?? [];
+                  const fotosFinalizacao = localData?.fotos.filter(f => !f.produto_codigo && !f.pedido_id) ?? [];
                   const fotosSacola      = sacolas?.flatMap(s =>
                     s.photos.map(p => ({ ...p, sacolaId: s.id }))
                   ) ?? [];
-                  const totalFotos = fotosProduto.length + fotosFinalizacao.length + fotosSacola.length;
+                  const totalFotos = fotosProduto.length + fotosPedido.length + fotosFinalizacao.length + fotosSacola.length;
 
                   if (totalFotos === 0) {
                     return <p className="text-sm text-muted-foreground py-4">Nenhuma foto registrada para esta carga.</p>;
@@ -817,6 +819,27 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                             {fotosProduto.map(foto => (
                               <div key={foto.id} className="flex flex-col gap-1">
                                 <span className="text-[10px] font-mono font-medium text-primary">#{foto.produto_codigo}</span>
+                                <FotoCard
+                                  src={foto.imagem_base64}
+                                  observacao={foto.observacao || undefined}
+                                  rodape={<span>{foto.conferente || 'Sistema'} · {formatarData(foto.capturado_em)}</span>}
+                                  onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                                />
+                              </div>
+                            ))}
+                          </FotoGrid>
+                        </div>
+                      )}
+
+                      {fotosPedido.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                            <Camera className="h-3.5 w-3.5 text-violet-500" /> Fotos de Pedido ({fotosPedido.length})
+                          </h4>
+                          <FotoGrid>
+                            {fotosPedido.map(foto => (
+                              <div key={foto.id} className="flex flex-col gap-1">
+                                <span className="text-[10px] font-mono font-medium text-violet-600">Pedido #{foto.pedido_id}</span>
                                 <FotoCard
                                   src={foto.imagem_base64}
                                   observacao={foto.observacao || undefined}

@@ -37,7 +37,7 @@ app.get('/cargas/:id/fotos', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, imagem_base64 as "imageData", observacao as "observation", capturado_em as "capturedAt", produto_codigo as "produtoCodigo" FROM fotos WHERE carga_id = $1',
+      'SELECT id, imagem_base64 as "imageData", observacao as "observation", capturado_em as "capturedAt", produto_codigo as "produtoCodigo", pedido_id as "pedidoId" FROM fotos WHERE carga_id = $1',
       [id]
     );
     res.json(result.rows);
@@ -139,10 +139,10 @@ app.post('/cargas/:id/fotos', async (req, res) => {
 
     for (const foto of fotos) {
       const fotoResult = await pool.query(
-        `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao, produto_codigo)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao, produto_codigo, pedido_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING RETURNING id`,
-        [foto.id, id, uid, foto.imageData, foto.observation, foto.produtoCodigo || null]
+        [foto.id, id, uid, foto.imageData, foto.observation, foto.produtoCodigo || null, foto.pedidoId || null]
       );
 
       if (fotoResult.rowCount > 0) {
@@ -469,7 +469,7 @@ app.get('/admin/cargas/:id', async (req, res) => {
 
     // Busca as fotos da carga
     const fotos = await pool.query(
-      `SELECT f.id, f.imagem_base64, f.observacao, f.capturado_em, f.produto_codigo, u.nome as conferente
+      `SELECT f.id, f.imagem_base64, f.observacao, f.capturado_em, f.produto_codigo, f.pedido_id, u.nome as conferente
        FROM fotos f
        LEFT JOIN usuarios u ON f.usuario_id = u.id
        WHERE f.carga_id = $1

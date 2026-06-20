@@ -34,6 +34,7 @@ export interface PhotoRecord {
   observation: string;
   capturedAt: string;
   produtoCodigo?: string;
+  pedidoId?: string;
 }
 
 // Bag (Sacola) types
