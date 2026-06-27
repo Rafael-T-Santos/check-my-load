@@ -6,6 +6,7 @@ import {
   History, Unlock, Camera, CheckSquare, Flag, FileWarning, MessageSquareWarning,
   ArrowUpDown, ArrowUp, ArrowDown,
   Download, ZoomIn, X, CheckCheck, Maximize2, Minimize2,
+  ClipboardList, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -82,6 +83,15 @@ interface ErpItem {
   doca: number;
   horaSaida: string;
   placa?: string;
+  nuNota: number;
+  parceiroRazao: string;
+}
+
+interface PedidoCruzado {
+  pedidoId: string;
+  customerName: string;
+  produtos: { codigo: string; descricao: string; marca: string; unidade: string; quantidade: number }[];
+  totalFotos: number;
 }
 
 type StatusConferencia = 'conferido' | 'pendente' | 'divergente' | 'excedente' | 'sem_previsao';
@@ -156,6 +166,8 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const [lightbox, setLightbox] = useState<LightboxFoto | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [fotoProdutoCodigo, setFotoProdutoCodigo] = useState<string | null>(null);
+  const [expandedPedidoId, setExpandedPedidoId] = useState<string | null>(null);
+  const [fotoPedidoId, setFotoPedidoId] = useState<string | null>(null);
   const [loadingLocal, setLoadingLocal] = useState(true);
   const [loadingERP, setLoadingERP] = useState(true);
   const [erpError, setErpError] = useState(false);
@@ -324,6 +336,35 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
 
   // sem_previsao = produto conferido mas removido/cancelado no ERP — não é pendência do operador
   const pendentes = produtosCruzados.filter(p => p.status !== 'conferido' && p.status !== 'sem_previsao');
+
+  const pedidosCruzados = useMemo((): PedidoCruzado[] => {
+    if (!erpData) return [];
+    const map = new Map<string, PedidoCruzado>();
+    for (const item of erpData) {
+      const key = String(item.nuNota);
+      if (!map.has(key)) {
+        map.set(key, { pedidoId: key, customerName: item.parceiroRazao || '-', produtos: [], totalFotos: 0 });
+      }
+      const pedido = map.get(key)!;
+      const existing = pedido.produtos.find(p => p.codigo === String(item.codProd));
+      if (existing) {
+        existing.quantidade += item.qtdNeg;
+      } else {
+        pedido.produtos.push({
+          codigo: String(item.codProd),
+          descricao: item.descrProd,
+          marca: item.marca,
+          unidade: item.codVol ?? '-',
+          quantidade: item.qtdNeg,
+        });
+      }
+    }
+    const fotos = localData?.fotos ?? [];
+    for (const [key, pedido] of map.entries()) {
+      pedido.totalFotos = fotos.filter(f => f.pedido_id === key).length;
+    }
+    return Array.from(map.values()).sort((a, b) => a.pedidoId.localeCompare(b.pedidoId));
+  }, [erpData, localData]);
 
   const resumeStats = useMemo(() => ({
     total: produtosCruzados.length,
@@ -496,6 +537,9 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
               </TabsTrigger>
               <TabsTrigger value="sacolas" className="flex items-center gap-1.5">
                 <ShoppingBag className="h-4 w-4" /> Sacolas ({sacolas?.length ?? 0})
+              </TabsTrigger>
+              <TabsTrigger value="pedidos" className="flex items-center gap-1.5">
+                <ClipboardList className="h-4 w-4" /> Pedidos ({pedidosCruzados.length})
               </TabsTrigger>
               <TabsTrigger value="fotos" className="flex items-center gap-1.5">
                 <Image className="h-4 w-4" /> Fotos ({(localData?.fotos.length ?? 0) + (sacolas?.reduce((acc, s) => acc + s.photos.length, 0) ?? 0)})
@@ -766,6 +810,79 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* ── PEDIDOS ────────────────────────────────────────────── */}
+              <TabsContent value="pedidos" className="mt-0">
+                {pedidosCruzados.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">
+                    {loadingERP ? 'Carregando dados do ERP...' : 'Nenhum pedido encontrado.'}
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {pedidosCruzados.map(pedido => {
+                      const isExpanded = expandedPedidoId === pedido.pedidoId;
+                      return (
+                        <div key={pedido.pedidoId} className="border rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setExpandedPedidoId(isExpanded ? null : pedido.pedidoId)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-muted/50 transition-colors text-left"
+                          >
+                            <div>
+                              <p className="font-mono text-sm font-semibold">Pedido #{pedido.pedidoId}</p>
+                              <p className="text-xs text-muted-foreground">{pedido.customerName}</p>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setFotoPedidoId(pedido.pedidoId); }}
+                                className="relative flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                                title="Ver fotos do pedido"
+                              >
+                                <Camera className="h-4 w-4" />
+                                {pedido.totalFotos > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-violet-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                                    {pedido.totalFotos}
+                                  </span>
+                                )}
+                              </button>
+                              <span className="text-xs text-muted-foreground">
+                                {pedido.produtos.length} produto{pedido.produtos.length !== 1 ? 's' : ''}
+                              </span>
+                              <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', isExpanded && 'rotate-180')} />
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t">
+                              <Table>
+                                <TableHeader className="bg-muted/50">
+                                  <TableRow>
+                                    <TableHead className="text-xs">Código</TableHead>
+                                    <TableHead className="text-xs">Descrição</TableHead>
+                                    <TableHead className="text-xs">Marca</TableHead>
+                                    <TableHead className="text-xs text-center">Unid.</TableHead>
+                                    <TableHead className="text-xs text-center">Qtd</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {pedido.produtos.map(p => (
+                                    <TableRow key={p.codigo}>
+                                      <TableCell className="font-mono text-xs">{p.codigo}</TableCell>
+                                      <TableCell className="text-xs max-w-[160px] truncate" title={p.descricao}>{p.descricao}</TableCell>
+                                      <TableCell className="text-xs">{p.marca}</TableCell>
+                                      <TableCell className="text-xs text-center text-muted-foreground">{p.unidade}</TableCell>
+                                      <TableCell className="text-xs text-center font-bold">{p.quantidade}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
@@ -1066,6 +1183,44 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                   onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
                 >
                   <img src={foto.imagem_base64} alt="Foto do produto" className="w-full h-48 object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomIn className="h-8 w-8 text-white" />
+                  </div>
+                </div>
+                {foto.observacao && (
+                  <p className="text-xs text-muted-foreground px-3 pt-2">{foto.observacao}</p>
+                )}
+                <p className="text-[10px] text-right text-muted-foreground px-3 pb-2">
+                  {foto.conferente} · {formatarData(foto.capturado_em)}
+                </p>
+              </div>
+            ));
+          })()}
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={!!fotoPedidoId} onOpenChange={(open) => { if (!open) setFotoPedidoId(null); }}>
+      <DialogContent className="max-w-sm max-h-[80vh] flex flex-col overflow-hidden p-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b shrink-0">
+          <DialogTitle className="text-base">Fotos do Pedido #{fotoPedidoId}</DialogTitle>
+          <DialogDescription className="text-xs">Registradas durante a conferência</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {(() => {
+            const fotos = localData?.fotos.filter(f => f.pedido_id === fotoPedidoId) ?? [];
+            if (fotos.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma foto registrada para este pedido.</p>
+              );
+            }
+            return fotos.map(foto => (
+              <div key={foto.id} className="border rounded-xl overflow-hidden">
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={() => setLightbox({ src: foto.imagem_base64, observacao: foto.observacao || '', conferente: foto.conferente || 'Sistema', data: formatarData(foto.capturado_em) })}
+                >
+                  <img src={foto.imagem_base64} alt="Foto do pedido" className="w-full h-48 object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <ZoomIn className="h-8 w-8 text-white" />
                   </div>
