@@ -175,10 +175,11 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const handleFinalizar = useCallback(async () => {
     setFinalizando(true);
     try {
+      const adminUser = (() => { try { return JSON.parse(localStorage.getItem('usuario') || '{}'); } catch { return {}; } })();
       const res = await fetch(`http://192.168.255.6:3000/cargas/${carga.id}/finalizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario_id: 1, via_admin: true, motivo_admin: motivoAdmin.trim() || undefined }),
+        body: JSON.stringify({ usuario_id: adminUser.id ?? 1, via_admin: true, motivo_admin: motivoAdmin.trim() || undefined }),
       });
       if (!res.ok) throw new Error();
       setCargaStatus('finalizada');
