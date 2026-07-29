@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { maskBarcode } from '@/lib/barcode';
 import { useEstoqueProgress } from '@/hooks/useEstoqueProgress';
 import { EstoqueVerificationModal } from '@/components/estoque/EstoqueVerificationModal';
 import {
@@ -51,7 +52,7 @@ const ItemCard = ({
         </div>
         <p className="font-medium text-sm leading-tight truncate">{item.descrprod}</p>
         {item.referencia && (
-          <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{item.referencia}</p>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{maskBarcode(item.referencia)}</p>
         )}
         {item.contado && item.estoquecontagem !== null && (
           <p className="text-xs text-emerald-600 font-semibold mt-1">

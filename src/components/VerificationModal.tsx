@@ -5,6 +5,7 @@ import { X, Check, AlertTriangle, Keyboard } from 'lucide-react';
 import { Product } from '@/types/cargo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { maskBarcode } from '@/lib/barcode';
 import { BarcodeScanner } from './BarcodeScanner';
 
 interface VerificationModalProps {
@@ -35,8 +36,11 @@ export function VerificationModal({
     if (isOpen) {
       setManualCode('');
       setQuantity('');
-      setIsBarcode1Valid(product?.hasBarcode === false);
-      setIsBarcode2Valid(!product?.barcode2);
+      // Se o produto não exige validação (ou não tem o código cadastrado),
+      // a fase correspondente já nasce validada.
+      const validaCodigo = product?.hasBarcode !== false;
+      setIsBarcode1Valid(!(validaCodigo && !!product?.barcode));
+      setIsBarcode2Valid(!(validaCodigo && !!product?.barcode2));
       setShowCodeError(false);
       setIsScannerActive(false);
       setShowManualInput(false);
@@ -45,10 +49,17 @@ export function VerificationModal({
 
   if (!product) return null;
 
+  const validaCodigo = product.hasBarcode !== false;
+  const requiresBarcode1 = validaCodigo && !!product.barcode;
+  const requiresBarcode2 = validaCodigo && !!product.barcode2;
+  const requiresAnyBarcode = requiresBarcode1 || requiresBarcode2;
+
+  const expectedCode = isOnBarcode2Phase ? product.barcode2 : product.barcode;
+
   const validateCode = (code: string) => {
-    const isValid = isOnBarcode2Phase
-      ? code === product.barcode2 || code === product.code
-      : code === product.code || code === product.barcode;
+    // Somente o código de barras é aceito — o código do produto não vale
+    // como validação, senão bastaria ler o número exibido na tela.
+    const isValid = !!expectedCode && code === expectedCode;
 
     if (code.length > 0) {
       if (isValid) {
@@ -79,7 +90,10 @@ export function VerificationModal({
   const handleManualCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setManualCode(value);
-    if (value.length > 0) {
+    // Só valida quando o que foi digitado já alcançou o tamanho do código
+    // esperado — senão cada dígito intermediário acusaria "código incorreto".
+    const expectedLength = expectedCode?.length ?? 0;
+    if (expectedLength > 0 && value.length >= expectedLength) {
       validateCode(value);
     } else {
       setShowCodeError(false);
@@ -154,12 +168,12 @@ export function VerificationModal({
                 <div className="pt-2 border-t border-border/50 space-y-1">
                   <div>
                     <span className="text-xs text-muted-foreground">{product.barcode2 ? 'Cód. barras 1: ' : 'Código de barras: '}</span>
-                    <span className="font-mono text-xs">{product.barcode || '-'}</span>
+                    <span className="font-mono text-xs">{maskBarcode(product.barcode) || '-'}</span>
                   </div>
                   {product.barcode2 && (
                     <div>
                       <span className="text-xs text-muted-foreground">Cód. barras 2: </span>
-                      <span className="font-mono text-xs">{product.barcode2}</span>
+                      <span className="font-mono text-xs">{maskBarcode(product.barcode2)}</span>
                     </div>
                   )}
                 </div>
@@ -179,7 +193,7 @@ export function VerificationModal({
                   <p className="text-sm font-medium text-center text-muted-foreground">
                     {isOnBarcode2Phase
                       ? 'Agora escaneie o 2º código de barras'
-                      : 'Verifique o produto escaneando ou digitando o código'}
+                      : 'Verifique o produto escaneando ou digitando o código de barras'}
                   </p>
 
                   <BarcodeScanner
@@ -200,23 +214,13 @@ export function VerificationModal({
                       </p>
                       <div className="text-xs text-center space-y-1">
                         <p className="text-muted-foreground">
-                          Lido: <span className="font-mono font-bold text-foreground text-sm">{manualCode}</span>
+                          Lido: <span className="font-mono font-bold text-foreground text-sm">{maskBarcode(manualCode)}</span>
                         </p>
                         <p className="text-muted-foreground">
                           Esperado:{' '}
-                          {isOnBarcode2Phase ? (
-                            <>
-                              <span className="font-mono font-bold text-foreground">{product.barcode2}</span>
-                              {' '}ou{' '}
-                              <span className="font-mono">{product.code}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-mono font-bold text-foreground">{product.barcode || 'Sem EAN'}</span>
-                              {' '}ou{' '}
-                              <span className="font-mono">{product.code}</span>
-                            </>
-                          )}
+                          <span className="font-mono font-bold text-foreground">
+                            {maskBarcode(expectedCode) || 'Sem EAN'}
+                          </span>
                         </p>
                       </div>
                     </motion.div>
@@ -245,7 +249,7 @@ export function VerificationModal({
                       <Input
                         inputMode="numeric"
                         pattern="[0-9]*"
-                        placeholder="Digite o código do produto ou código de barras"
+                        placeholder="Digite o código de barras do produto"
                         value={manualCode}
                         onChange={handleManualCodeChange}
                         className={
@@ -270,9 +274,9 @@ export function VerificationModal({
                   <div className="flex items-center gap-2 p-3 bg-success-light rounded-lg">
                     <Check className="w-5 h-5 text-success" />
                     <span className="text-sm font-medium text-success">
-                      {product?.hasBarcode === false
+                      {!requiresAnyBarcode
                         ? 'Produto não exige validação de código. Insira a quantidade.'
-                        : product?.barcode2
+                        : requiresBarcode1 && requiresBarcode2
                           ? '2 códigos verificados! Insira a quantidade.'
                           : 'Código verificado!'}
                     </span>

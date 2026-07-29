@@ -5,6 +5,7 @@ import { X, Check, AlertTriangle, Keyboard } from 'lucide-react';
 import { ItemEstoque } from '@/types/estoque';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { maskBarcode } from '@/lib/barcode';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 
 interface EstoqueVerificationModalProps {
@@ -35,8 +36,9 @@ export function EstoqueVerificationModal({
     if (isOpen && item) {
       setManualCode('');
       setQuantity('');
-      setIsBarcode1Valid(!item.hasBarcode);          // pula scan se não exige
-      setIsBarcode2Valid(!item.referencia2);          // pula fase 2 se não tem 2º código
+      // Pula a fase quando o item não exige validação ou não tem o código cadastrado
+      setIsBarcode1Valid(!(item.hasBarcode && !!item.referencia));
+      setIsBarcode2Valid(!(item.hasBarcode && !!item.referencia2));
       setShowCodeError(false);
       setIsScannerActive(false);
       setShowManualInput(false);
@@ -45,10 +47,16 @@ export function EstoqueVerificationModal({
 
   if (!item) return null;
 
+  const requiresBarcode1 = item.hasBarcode && !!item.referencia;
+  const requiresBarcode2 = item.hasBarcode && !!item.referencia2;
+  const requiresAnyBarcode = requiresBarcode1 || requiresBarcode2;
+
+  const expectedCode = isOnBarcode2Phase ? item.referencia2 : item.referencia;
+
   const validateCode = (code: string) => {
-    const isValid = isOnBarcode2Phase
-      ? code === item.referencia2 || code === item.codprod
-      : code === item.codprod   || code === item.referencia;
+    // Somente o código de barras é aceito — o codprod não vale como validação,
+    // senão bastaria ler o número exibido na tela.
+    const isValid = !!expectedCode && code === expectedCode;
 
     if (code.length > 0) {
       if (isValid) {
@@ -79,7 +87,10 @@ export function EstoqueVerificationModal({
   const handleManualCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setManualCode(value);
-    if (value.length > 0) validateCode(value);
+    // Só valida quando o que foi digitado já alcançou o tamanho do código
+    // esperado — senão cada dígito intermediário acusaria "código incorreto".
+    const expectedLength = expectedCode?.length ?? 0;
+    if (expectedLength > 0 && value.length >= expectedLength) validateCode(value);
     else setShowCodeError(false);
   };
 
@@ -138,12 +149,12 @@ export function EstoqueVerificationModal({
                       <span className="text-xs text-muted-foreground">
                         {item.referencia2 ? 'Cód. barras 1: ' : 'Código de barras: '}
                       </span>
-                      <span className="font-mono text-xs">{item.referencia}</span>
+                      <span className="font-mono text-xs">{maskBarcode(item.referencia)}</span>
                     </div>
                     {item.referencia2 && (
                       <div>
                         <span className="text-xs text-muted-foreground">Cód. barras 2: </span>
-                        <span className="font-mono text-xs">{item.referencia2}</span>
+                        <span className="font-mono text-xs">{maskBarcode(item.referencia2)}</span>
                       </div>
                     )}
                   </div>
@@ -184,23 +195,13 @@ export function EstoqueVerificationModal({
                       </p>
                       <div className="text-xs text-center space-y-1">
                         <p className="text-muted-foreground">
-                          Lido: <span className="font-mono font-bold text-foreground text-sm">{manualCode}</span>
+                          Lido: <span className="font-mono font-bold text-foreground text-sm">{maskBarcode(manualCode)}</span>
                         </p>
                         <p className="text-muted-foreground">
                           Esperado:{' '}
-                          {isOnBarcode2Phase ? (
-                            <>
-                              <span className="font-mono font-bold text-foreground">{item.referencia2}</span>
-                              {' '}ou{' '}
-                              <span className="font-mono">{item.codprod}</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="font-mono font-bold text-foreground">{item.referencia || 'Sem EAN'}</span>
-                              {' '}ou{' '}
-                              <span className="font-mono">{item.codprod}</span>
-                            </>
-                          )}
+                          <span className="font-mono font-bold text-foreground">
+                            {maskBarcode(expectedCode) || 'Sem EAN'}
+                          </span>
                         </p>
                       </div>
                     </motion.div>
@@ -224,7 +225,7 @@ export function EstoqueVerificationModal({
                     <Input
                       inputMode="numeric"
                       pattern="[0-9]*"
-                      placeholder="Digite o código do produto ou código de barras"
+                      placeholder="Digite o código de barras do item"
                       value={manualCode}
                       onChange={handleManualCodeChange}
                       className={showCodeError ? 'border-destructive focus:ring-destructive' : ''}
@@ -244,9 +245,9 @@ export function EstoqueVerificationModal({
                   <div className="flex items-center gap-2 p-3 bg-success-light rounded-lg">
                     <Check className="w-5 h-5 text-success" />
                     <span className="text-sm font-medium text-success">
-                      {!item.hasBarcode
+                      {!requiresAnyBarcode
                         ? 'Produto não exige validação de código. Insira a quantidade.'
-                        : item.referencia2
+                        : requiresBarcode1 && requiresBarcode2
                           ? '2 códigos verificados! Insira a quantidade.'
                           : 'Código verificado! Insira a quantidade contada.'}
                     </span>
