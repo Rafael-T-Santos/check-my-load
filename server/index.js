@@ -15,6 +15,31 @@ const pool = new Pool({
   port: 5432,
 });
 
+/**
+ * Executa `fn` dentro de uma transação REAL, numa única conexão.
+ *
+ * Antes o código fazia `pool.query('BEGIN')`, e cada `pool.query` pode pegar uma
+ * conexão diferente do pool: o BEGIN ia numa conexão, os INSERTs noutra e o
+ * COMMIT noutra ainda. Com um utilizador só costumava funcionar por acidente
+ * (o pool devolve a mesma conexão livre), mas com dois conferentes a
+ * sincronizar ao mesmo tempo — que é a premissa deste sistema — o ROLLBACK
+ * podia não desfazer nada e sobravam conexões presas em "idle in transaction".
+ */
+async function comTransacao(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resultado = await fn(client);
+    await client.query('COMMIT');
+    return resultado;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 app.get('/health', (req, res) => res.json({ status: 'ok', message: 'Backend a funcionar!' }));
 
 // 1. Buscar progresso salvo da carga
@@ -54,66 +79,125 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
   const uid = usuario_id || 1;
 
   try {
-    await pool.query('BEGIN');
-
-    const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
-                                      atualizado_em = CURRENT_TIMESTAMP
-       RETURNING (xmax = 0) AS inserido`,
-      [id, placa || null]
-    );
-    const cargaNova = cargaResult.rows[0]?.inserido === true;
-
-    // Busca quantidades anteriores para registrar no histórico
-    const qtdAnteriorResult = await pool.query(
-      `SELECT produto_codigo, quantidade_conferida::FLOAT FROM conferencias_produtos WHERE carga_id = $1`,
-      [id]
-    );
-    const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.produto_codigo, r.quantidade_conferida]));
-
-    for (const prod of produtos) {
-      const qtdAnterior = qtdAnteriorMap.get(prod.codigo) ?? null;
-      const qtdMudou = qtdAnterior === null || qtdAnterior !== Number(prod.quantidade);
-
-      await pool.query(
-        `INSERT INTO conferencias_produtos (carga_id, produto_codigo, quantidade_conferida, conferido_por_usuario_id, marca)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (carga_id, produto_codigo)
-         DO UPDATE SET quantidade_conferida = EXCLUDED.quantidade_conferida,
-                       conferido_por_usuario_id = CASE
-                         WHEN conferencias_produtos.quantidade_conferida != EXCLUDED.quantidade_conferida
-                         THEN EXCLUDED.conferido_por_usuario_id
-                         ELSE conferencias_produtos.conferido_por_usuario_id
-                       END,
-                       atualizado_em = CURRENT_TIMESTAMP`,
-        [id, prod.codigo, prod.quantidade, uid, prod.marca]
+    const conflitos = await comTransacao(async (client) => {
+      const cargaResult = await client.query(
+        `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+         ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
+                                        atualizado_em = CURRENT_TIMESTAMP
+         RETURNING (xmax = 0) AS inserido`,
+        [id, placa || null]
       );
+      const cargaNova = cargaResult.rows[0]?.inserido === true;
 
-      if (qtdMudou) {
-        await pool.query(
-          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-          [id, uid, 'produto_conferido', JSON.stringify({
+      // Serializa os syncs da MESMA carga. Sem isto, dois conferentes que
+      // sincronizam ao mesmo tempo leem o mesmo "valor anterior" e o segundo
+      // grava por cima do primeiro sem nunca ver o que ele escreveu.
+      await client.query(`SELECT id FROM conferencias_cargas WHERE id = $1 FOR UPDATE`, [id]);
+
+      const atuaisResult = await client.query(
+        `SELECT produto_codigo, quantidade_conferida::FLOAT AS quantidade, conferido_por_usuario_id
+           FROM conferencias_produtos WHERE carga_id = $1`,
+        [id]
+      );
+      const atual = new Map(atuaisResult.rows.map(r => [r.produto_codigo, r]));
+
+      const conflitos = [];
+
+      for (const prod of produtos) {
+        const anterior = atual.get(prod.codigo);
+        const qtdNova = Number(prod.quantidade);
+
+        // Produto ainda não conferido por ninguém: entra normalmente.
+        if (!anterior) {
+          await client.query(
+            `INSERT INTO conferencias_produtos (carga_id, produto_codigo, quantidade_conferida, conferido_por_usuario_id, marca)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (carga_id, produto_codigo) DO NOTHING`,
+            [id, prod.codigo, qtdNova, uid, prod.marca]
+          );
+          await client.query(
+            `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+            [id, uid, 'produto_conferido', JSON.stringify({
+              produto_codigo: prod.codigo,
+              marca: prod.marca,
+              qtd_anterior: null,
+              qtd_nova: qtdNova
+            })]
+          );
+          continue;
+        }
+
+        // Mesma quantidade que já está gravada: nada a fazer. É o caso mais
+        // comum, porque o app reenvia tudo o que puxou dos colegas.
+        if (anterior.quantidade === qtdNova) continue;
+
+        // A própria pessoa a corrigir a contagem dela: pode.
+        if (anterior.conferido_por_usuario_id === uid) {
+          await client.query(
+            `UPDATE conferencias_produtos
+                SET quantidade_conferida = $3, atualizado_em = CURRENT_TIMESTAMP
+              WHERE carga_id = $1 AND produto_codigo = $2`,
+            [id, prod.codigo, qtdNova]
+          );
+          await client.query(
+            `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+            [id, uid, 'produto_conferido', JSON.stringify({
+              produto_codigo: prod.codigo,
+              marca: prod.marca,
+              qtd_anterior: anterior.quantidade,
+              qtd_nova: qtdNova
+            })]
+          );
+          continue;
+        }
+
+        // DIVERGÊNCIA: outra pessoa já contou este produto e chegou a um número
+        // diferente. NÃO se sobrescreve — era exatamente isso que fazia dois
+        // aparelhos reimporem o próprio número em looping, e o valor final
+        // acabava a ser o de quem sincronizasse por último. Os dois números são
+        // informação legítima; quem decide é uma pessoa, com recontagem.
+        conflitos.push({
+          produto_codigo: prod.codigo,
+          marca: prod.marca || null,
+          qtd_no_sistema: anterior.quantidade,
+          qtd_enviada: qtdNova,
+          conferido_por_usuario_id: anterior.conferido_por_usuario_id
+        });
+
+        // Só regista a divergência uma vez por pessoa/produto/valor: sem isto,
+        // um app antigo a reenviar tudo a cada sync repetiria a linha para
+        // sempre — trocaria a corrupção de dados por lixo no histórico.
+        await client.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes)
+           SELECT $1, $2, 'divergencia_quantidade', $3::jsonb
+            WHERE NOT EXISTS (
+                  SELECT 1 FROM historico_acoes
+                   WHERE carga_id = $1 AND usuario_id = $2
+                     AND acao = 'divergencia_quantidade'
+                     AND detalhes->>'produto_codigo' = $4
+                     AND detalhes->>'qtd_enviada' = $5)`,
+          [id, uid, JSON.stringify({
             produto_codigo: prod.codigo,
             marca: prod.marca,
-            qtd_anterior: qtdAnterior,
-            qtd_nova: prod.quantidade
-          })]
+            qtd_no_sistema: anterior.quantidade,
+            qtd_enviada: qtdNova,
+            conferido_por_usuario_id: anterior.conferido_por_usuario_id
+          }), prod.codigo, String(qtdNova)]
         );
       }
-    }
 
-    if (cargaNova) {
-      await pool.query(
-        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-        [id, uid, 'carga_aberta', JSON.stringify({})]
-      );
-    }
+      if (cargaNova) {
+        await client.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+          [id, uid, 'carga_aberta', JSON.stringify({})]
+        );
+      }
 
-    await pool.query('COMMIT');
-    res.json({ sucesso: true });
+      return conflitos;
+    });
+
+    res.json({ sucesso: true, conflitos });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao sincronizar:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
@@ -126,47 +210,45 @@ app.post('/cargas/:id/fotos', async (req, res) => {
   const uid = usuario_id || 1;
 
   try {
-    await pool.query('BEGIN');
-
-    const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
-                                      atualizado_em = CURRENT_TIMESTAMP
-       RETURNING (xmax = 0) AS inserido`,
-      [id, placa || null]
-    );
-    const cargaNova = cargaResult.rows[0]?.inserido === true;
-
-    for (const foto of fotos) {
-      const fotoResult = await pool.query(
-        `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao, produto_codigo, pedido_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (id) DO NOTHING RETURNING id`,
-        [foto.id, id, uid, foto.imageData, foto.observation, foto.produtoCodigo || null, foto.pedidoId || null]
+    await comTransacao(async (client) => {
+      const cargaResult = await client.query(
+        `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+         ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
+                                        atualizado_em = CURRENT_TIMESTAMP
+         RETURNING (xmax = 0) AS inserido`,
+        [id, placa || null]
       );
+      const cargaNova = cargaResult.rows[0]?.inserido === true;
 
-      if (fotoResult.rowCount > 0) {
-        await pool.query(
+      for (const foto of fotos) {
+        const fotoResult = await client.query(
+          `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao, produto_codigo, pedido_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING RETURNING id`,
+          [foto.id, id, uid, foto.imageData, foto.observation, foto.produtoCodigo || null, foto.pedidoId || null]
+        );
+
+        if (fotoResult.rowCount > 0) {
+          await client.query(
+            `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+            [id, uid, 'foto_adicionada', JSON.stringify({
+              foto_id: foto.id,
+              observacao: foto.observation || null
+            })]
+          );
+        }
+      }
+
+      if (cargaNova) {
+        await client.query(
           `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-          [id, uid, 'foto_adicionada', JSON.stringify({
-            foto_id: foto.id,
-            observacao: foto.observation || null
-          })]
+          [id, uid, 'carga_aberta', JSON.stringify({})]
         );
       }
-    }
+    });
 
-    if (cargaNova) {
-      await pool.query(
-        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-        [id, uid, 'carga_aberta', JSON.stringify({})]
-      );
-    }
-
-    await pool.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao salvar fotos:', err);
     res.status(500).json({ error: 'Erro ao salvar fotos' });
   }
@@ -183,22 +265,20 @@ app.post('/cargas/:id/finalizar', async (req, res) => {
     : {};
 
   try {
-    await pool.query('BEGIN');
+    await comTransacao(async (client) => {
+      await client.query(
+        `UPDATE conferencias_cargas SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
+        [id]
+      );
 
-    await pool.query(
-      `UPDATE conferencias_cargas SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
-      [id]
-    );
+      await client.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'carga_finalizada', JSON.stringify(detalhes)]
+      );
+    });
 
-    await pool.query(
-      `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-      [id, uid, 'carga_finalizada', JSON.stringify(detalhes)]
-    );
-
-    await pool.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao finalizar carga:', err);
     res.status(500).json({ error: 'Erro ao finalizar carga' });
   }
@@ -282,78 +362,76 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
   const uid = usuario_id || 1;
 
   try {
-    await pool.query('BEGIN');
-
-    const cargaResult = await pool.query(
-      `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
-                                      atualizado_em = CURRENT_TIMESTAMP
-       RETURNING (xmax = 0) AS inserido`,
-      [id, placa || null]
-    );
-    const cargaNova = cargaResult.rows[0]?.inserido === true;
-
-    for (const sacola of sacolas) {
-      // 1. Insere a sacola — RETURNING detecta se é nova
-      const sacolaResult = await pool.query(
-        `INSERT INTO sacolas (id, carga_id, usuario_id, criado_em)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO NOTHING RETURNING id`,
-        [sacola.id, id, uid, sacola.createdAt]
+    await comTransacao(async (client) => {
+      const cargaResult = await client.query(
+        `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
+         ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
+                                        atualizado_em = CURRENT_TIMESTAMP
+         RETURNING (xmax = 0) AS inserido`,
+        [id, placa || null]
       );
+      const cargaNova = cargaResult.rows[0]?.inserido === true;
 
-      if (sacolaResult.rowCount > 0) {
-        await pool.query(
+      for (const sacola of sacolas) {
+        // 1. Insere a sacola — RETURNING detecta se é nova
+        const sacolaResult = await client.query(
+          `INSERT INTO sacolas (id, carga_id, usuario_id, criado_em)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (id) DO NOTHING RETURNING id`,
+          [sacola.id, id, uid, sacola.createdAt]
+        );
+
+        if (sacolaResult.rowCount > 0) {
+          await client.query(
+            `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+            [id, uid, 'sacola_criada', JSON.stringify({
+              sacola_id: sacola.id,
+              pedidos: sacola.orders
+            })]
+          );
+        }
+
+        // 2. Insere os pedidos da sacola
+        for (const pedidoId of sacola.orders) {
+          await client.query(
+            `INSERT INTO sacolas_pedidos (sacola_id, pedido_id)
+             VALUES ($1, $2)
+             ON CONFLICT (sacola_id, pedido_id) DO NOTHING`,
+            [sacola.id, pedidoId]
+          );
+        }
+
+        // 3. Insere os produtos (limpa antes para evitar duplicidade na sincronização)
+        await client.query(`DELETE FROM sacolas_produtos WHERE sacola_id = $1`, [sacola.id]);
+        for (const prod of sacola.products) {
+          await client.query(
+            `INSERT INTO sacolas_produtos (sacola_id, produto_codigo, descricao, quantidade)
+             VALUES ($1, $2, $3, $4)`,
+            [sacola.id, prod.code, prod.description, prod.quantity]
+          );
+        }
+
+        // 4. Insere as fotos
+        for (const foto of sacola.photos) {
+          await client.query(
+            `INSERT INTO sacolas_fotos (id, sacola_id, imagem_base64, observacao, capturado_em)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (id) DO NOTHING`,
+            [foto.id, sacola.id, foto.imageData, foto.observation || null, foto.capturedAt || new Date()]
+          );
+        }
+      }
+
+      if (cargaNova) {
+        await client.query(
           `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-          [id, uid, 'sacola_criada', JSON.stringify({
-            sacola_id: sacola.id,
-            pedidos: sacola.orders
-          })]
+          [id, uid, 'carga_aberta', JSON.stringify({})]
         );
       }
+    });
 
-      // 2. Insere os pedidos da sacola
-      for (const pedidoId of sacola.orders) {
-        await pool.query(
-          `INSERT INTO sacolas_pedidos (sacola_id, pedido_id)
-           VALUES ($1, $2)
-           ON CONFLICT (sacola_id, pedido_id) DO NOTHING`,
-          [sacola.id, pedidoId]
-        );
-      }
-
-      // 3. Insere os produtos (limpa antes para evitar duplicidade na sincronização)
-      await pool.query(`DELETE FROM sacolas_produtos WHERE sacola_id = $1`, [sacola.id]);
-      for (const prod of sacola.products) {
-        await pool.query(
-          `INSERT INTO sacolas_produtos (sacola_id, produto_codigo, descricao, quantidade)
-           VALUES ($1, $2, $3, $4)`,
-          [sacola.id, prod.code, prod.description, prod.quantity]
-        );
-      }
-
-      // 4. Insere as fotos
-      for (const foto of sacola.photos) {
-        await pool.query(
-          `INSERT INTO sacolas_fotos (id, sacola_id, imagem_base64, observacao, capturado_em)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (id) DO NOTHING`,
-          [foto.id, sacola.id, foto.imageData, foto.observation || null, foto.capturedAt || new Date()]
-        );
-      }
-    }
-
-    if (cargaNova) {
-      await pool.query(
-        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-        [id, uid, 'carga_aberta', JSON.stringify({})]
-      );
-    }
-
-    await pool.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao salvar sacolas:', err);
     res.status(500).json({ error: 'Erro ao salvar sacolas' });
   }
@@ -515,19 +593,18 @@ app.post('/cargas/:id/observacoes', async (req, res) => {
     return res.status(400).json({ error: 'Justificativa muito curta' });
   }
   try {
-    await pool.query('BEGIN');
-    await pool.query(
-      `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT DO NOTHING`,
-      [id]
-    );
-    await pool.query(
-      `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
-      [id, uid, 'finalizacao_justificada', JSON.stringify({ justificativa: justificativa.trim() })]
-    );
-    await pool.query('COMMIT');
+    await comTransacao(async (client) => {
+      await client.query(
+        `INSERT INTO conferencias_cargas (id) VALUES ($1) ON CONFLICT DO NOTHING`,
+        [id]
+      );
+      await client.query(
+        `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+        [id, uid, 'finalizacao_justificada', JSON.stringify({ justificativa: justificativa.trim() })]
+      );
+    });
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao salvar observação:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
@@ -652,75 +729,77 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
   const { itens, usuario_id, contagem } = req.body;
   const uid = usuario_id || 1;
 
+  // NOTA: este endpoint tem a MESMA forma de sobrescrita cega do /cargas/:id/sincronizar
+  // (último a gravar vence). Aqui só se corrigiu a transação, porque não há indício de
+  // dano nos dados e a contagem de estoque parece ter um dono só por sessão — mas isso
+  // ainda não foi verificado. Ver a consulta de conferência no relatório da investigação.
   try {
-    await pool.query('BEGIN');
-
-    const contagemResult = await pool.query(
-      `INSERT INTO contagens_estoque (nucontagem, codigo, descricao_marca, codlocal, usuario_id)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (nucontagem) DO UPDATE
-         SET descricao_marca = COALESCE(EXCLUDED.descricao_marca, contagens_estoque.descricao_marca),
-             status          = 'em_andamento',
-             atualizado_em   = CURRENT_TIMESTAMP
-       RETURNING id, (xmax = 0) AS inserido`,
-      [nucontagem, contagem?.codigo || null, contagem?.descricao_marca || null, contagem?.codlocal || null, uid]
-    );
-
-    const contagemId   = contagemResult.rows[0].id;
-    const contagemNova = contagemResult.rows[0].inserido === true;
-
-    const qtdAnteriorResult = await pool.query(
-      `SELECT codprod, estoque_contagem::FLOAT FROM contagens_estoque_produtos WHERE contagem_id = $1`,
-      [contagemId]
-    );
-    const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.codprod, r.estoque_contagem]));
-
-    for (const item of itens) {
-      const qtdAnterior = qtdAnteriorMap.get(item.codprod) ?? null;
-      const qtdMudou    = qtdAnterior === null || qtdAnterior !== Number(item.estoquecontagem);
-
-      await pool.query(
-        `INSERT INTO contagens_estoque_produtos
-           (contagem_id, nucontagem, sequencia, codprod, descrprod, referencia,
-            estoque_atual, estoque_contagem, conferido_por_usuario_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (contagem_id, codprod) DO UPDATE SET
-           estoque_contagem         = EXCLUDED.estoque_contagem,
-           conferido_por_usuario_id = CASE
-             WHEN contagens_estoque_produtos.estoque_contagem IS DISTINCT FROM EXCLUDED.estoque_contagem
-             THEN EXCLUDED.conferido_por_usuario_id
-             ELSE contagens_estoque_produtos.conferido_por_usuario_id
-           END,
-           atualizado_em = CURRENT_TIMESTAMP`,
-        [contagemId, nucontagem, item.sequencia, item.codprod, item.descrprod,
-         item.referencia, item.estoqueatual, item.estoquecontagem, uid]
+    await comTransacao(async (client) => {
+      const contagemResult = await client.query(
+        `INSERT INTO contagens_estoque (nucontagem, codigo, descricao_marca, codlocal, usuario_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (nucontagem) DO UPDATE
+           SET descricao_marca = COALESCE(EXCLUDED.descricao_marca, contagens_estoque.descricao_marca),
+               status          = 'em_andamento',
+               atualizado_em   = CURRENT_TIMESTAMP
+         RETURNING id, (xmax = 0) AS inserido`,
+        [nucontagem, contagem?.codigo || null, contagem?.descricao_marca || null, contagem?.codlocal || null, uid]
       );
 
-      if (qtdMudou) {
-        await pool.query(
+      const contagemId   = contagemResult.rows[0].id;
+      const contagemNova = contagemResult.rows[0].inserido === true;
+
+      const qtdAnteriorResult = await client.query(
+        `SELECT codprod, estoque_contagem::FLOAT FROM contagens_estoque_produtos WHERE contagem_id = $1`,
+        [contagemId]
+      );
+      const qtdAnteriorMap = new Map(qtdAnteriorResult.rows.map(r => [r.codprod, r.estoque_contagem]));
+
+      for (const item of itens) {
+        const qtdAnterior = qtdAnteriorMap.get(item.codprod) ?? null;
+        const qtdMudou    = qtdAnterior === null || qtdAnterior !== Number(item.estoquecontagem);
+
+        await client.query(
+          `INSERT INTO contagens_estoque_produtos
+             (contagem_id, nucontagem, sequencia, codprod, descrprod, referencia,
+              estoque_atual, estoque_contagem, conferido_por_usuario_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (contagem_id, codprod) DO UPDATE SET
+             estoque_contagem         = EXCLUDED.estoque_contagem,
+             conferido_por_usuario_id = CASE
+               WHEN contagens_estoque_produtos.estoque_contagem IS DISTINCT FROM EXCLUDED.estoque_contagem
+               THEN EXCLUDED.conferido_por_usuario_id
+               ELSE contagens_estoque_produtos.conferido_por_usuario_id
+             END,
+             atualizado_em = CURRENT_TIMESTAMP`,
+          [contagemId, nucontagem, item.sequencia, item.codprod, item.descrprod,
+           item.referencia, item.estoqueatual, item.estoquecontagem, uid]
+        );
+
+        if (qtdMudou) {
+          await client.query(
+            `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
+             VALUES ($1, $2, $3, $4)`,
+            [contagemId, uid, 'item_contado', JSON.stringify({
+              codprod:      item.codprod,
+              qtd_anterior: qtdAnterior,
+              qtd_nova:     item.estoquecontagem,
+            })]
+          );
+        }
+      }
+
+      if (contagemNova) {
+        await client.query(
           `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
            VALUES ($1, $2, $3, $4)`,
-          [contagemId, uid, 'item_contado', JSON.stringify({
-            codprod:      item.codprod,
-            qtd_anterior: qtdAnterior,
-            qtd_nova:     item.estoquecontagem,
-          })]
+          [contagemId, uid, 'contagem_aberta', JSON.stringify({})]
         );
       }
-    }
+    });
 
-    if (contagemNova) {
-      await pool.query(
-        `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
-         VALUES ($1, $2, $3, $4)`,
-        [contagemId, uid, 'contagem_aberta', JSON.stringify({})]
-      );
-    }
-
-    await pool.query('COMMIT');
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK');
     console.error('Erro ao sincronizar contagem de estoque:', err);
     res.status(500).json({ error: 'Erro interno' });
   }
@@ -770,24 +849,23 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
       return res.status(502).json({ error: 'Erro ao registrar contagem no ERP', detail: errBody });
     }
 
-    await pool.query('BEGIN');
-    await pool.query(
-      `UPDATE contagens_estoque
-       SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP
-       WHERE nucontagem = $1`,
-      [nucontagem]
-    );
-    await pool.query(
-      `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
-       VALUES ($1, $2, $3, $4)`,
-      [contagemId, uid, 'contagem_finalizada',
-       JSON.stringify({ itens_enviados: itensParaSankhya.length })]
-    );
-    await pool.query('COMMIT');
+    await comTransacao(async (client) => {
+      await client.query(
+        `UPDATE contagens_estoque
+         SET status = 'finalizada', atualizado_em = CURRENT_TIMESTAMP
+         WHERE nucontagem = $1`,
+        [nucontagem]
+      );
+      await client.query(
+        `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
+         VALUES ($1, $2, $3, $4)`,
+        [contagemId, uid, 'contagem_finalizada',
+         JSON.stringify({ itens_enviados: itensParaSankhya.length })]
+      );
+    });
 
     res.json({ sucesso: true });
   } catch (err) {
-    await pool.query('ROLLBACK').catch(() => {});
     console.error('Erro ao finalizar contagem de estoque:', err);
     res.status(500).json({ error: 'Erro ao finalizar contagem' });
   }

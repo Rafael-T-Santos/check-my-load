@@ -14,6 +14,16 @@ export interface Product {
   totalQuantity: number;
   checkedQuantity: number | null;
   isChecked: boolean;
+  /**
+   * Este aparelho foi quem contou o produto, nesta sessão.
+   *
+   * `isChecked` diz apenas que ALGUÉM já conferiu — a sincronização de mão dupla
+   * marca como conferido também o que veio dos colegas, para a tela mostrar o
+   * progresso da carga inteira. Só que isso fazia o aparelho reenviar o trabalho
+   * alheio como se fosse seu, e dois telemóveis passavam a reimpor o próprio
+   * número um por cima do outro em looping. Só o que tem esta marca é enviado.
+   */
+  checkedByMe?: boolean;
   hasBarcode: boolean;
 }
 
@@ -64,7 +74,7 @@ export interface OrderInfo {
 
 export interface CargoProgress {
   cargoId: string;
-  products: Record<string, { checkedQuantity: number | null; isChecked: boolean }>;
+  products: Record<string, { checkedQuantity: number | null; isChecked: boolean; checkedByMe?: boolean }>;
   photos: PhotoRecord[];
   bags: Bag[];
   currentStep: 'brand-selection' | 'verification' | 'photos' | 'completed';

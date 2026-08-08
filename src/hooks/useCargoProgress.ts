@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Cargo, CargoProgress, Product, PhotoRecord, AppStep, Bag, BrandStatus } from '@/types/cargo';
 import { mockCargos } from '@/data/mockCargos';
 
@@ -131,6 +132,7 @@ export function useCargoProgress() {
         acc[p.code] = {
           checkedQuantity: p.checkedQuantity,
           isChecked: p.isChecked,
+          checkedByMe: p.checkedByMe,
         };
         return acc;
       }, {} as CargoProgress['products']),
@@ -226,6 +228,10 @@ export function useCargoProgress() {
             ...product,
             checkedQuantity: savedProd ? savedProd.quantidade_conferida : null,
             isChecked: !!savedProd,
+            // O que vem do banco foi contado por alguém — não necessariamente
+            // por quem está a abrir a carga agora. Sem `checkedByMe`, este
+            // aparelho não reenvia (nem sobrescreve) a contagem alheia.
+            checkedByMe: false,
           };
         });
 
@@ -254,9 +260,12 @@ export function useCargoProgress() {
   const saveProgressToDB = useCallback(async () => {
     if (!currentCargo) return;
 
-    // 1. Prepara os produtos conferidos
+    // 1. Prepara os produtos conferidos NESTE aparelho.
+    //    `checkedByMe` é o que separa "eu contei" de "alguém contou e eu recebi
+    //    na sincronização". Enviar o segundo grupo era o que punha dois
+    //    telemóveis a reescrever a contagem um do outro em looping.
     const produtosConferidos = products
-      .filter(p => p.isChecked && p.checkedQuantity !== null)
+      .filter(p => p.checkedByMe && p.checkedQuantity !== null)
       .map(p => ({
         codigo: p.code,
         quantidade: p.checkedQuantity,
@@ -266,7 +275,7 @@ export function useCargoProgress() {
     // 2. Salva os produtos APENAS se houver algum produto conferido
     if (produtosConferidos.length > 0) {
       try {
-        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
+        const resposta = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -276,6 +285,22 @@ export function useCargoProgress() {
           })
         });
         console.log('Progresso salvo no banco!');
+
+        // O servidor recusa sobrescrever a contagem de outra pessoa e devolve a
+        // divergência em vez de a esconder. Duas contagens diferentes do mesmo
+        // produto é exatamente o que a conferência existe para apanhar — tem de
+        // chegar a quem está no armazém, não morrer num log.
+        const corpo = await resposta.json().catch(() => null);
+        if (corpo?.conflitos?.length) {
+          for (const c of corpo.conflitos) {
+            toast.warning(`Divergência no produto ${c.produto_codigo} ⚠️`, {
+              description:
+                `Outro conferente registou ${c.qtd_no_sistema} e você contou ${c.qtd_enviada}. ` +
+                `O valor no sistema foi mantido — confiram juntos antes de finalizar.`,
+              duration: 15000,
+            });
+          }
+        }
       } catch (error) {
         console.error('Erro ao sincronizar com banco de dados:', error);
       }
@@ -352,7 +377,7 @@ export function useCargoProgress() {
     setProducts(prev =>
       prev.map(p =>
         p.code === code
-          ? { ...p, checkedQuantity, isChecked: true }
+          ? { ...p, checkedQuantity, isChecked: true, checkedByMe: true }
           : p
       )
     );
