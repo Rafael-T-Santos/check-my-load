@@ -79,7 +79,7 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
   const uid = usuario_id || 1;
 
   try {
-    const conflitos = await comTransacao(async (client) => {
+    const correcoes = await comTransacao(async (client) => {
       const cargaResult = await client.query(
         `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
          ON CONFLICT (id) DO UPDATE SET placa = COALESCE(EXCLUDED.placa, conferencias_cargas.placa),
@@ -101,7 +101,7 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
       );
       const atual = new Map(atuaisResult.rows.map(r => [r.produto_codigo, r]));
 
-      const conflitos = [];
+      const correcoes = [];
 
       for (const prod of produtos) {
         const anterior = atual.get(prod.codigo);
@@ -127,8 +127,10 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
           continue;
         }
 
-        // Mesma quantidade que já está gravada: nada a fazer. É o caso mais
-        // comum, porque o app reenvia tudo o que puxou dos colegas.
+        // Mesma quantidade que já está gravada: nada a fazer. Acontece quando o
+        // envio chegou mas a resposta perdeu-se, e o app repete; e continuará a
+        // acontecer enquanto houver telemóveis com a versão antiga do app, que
+        // reenvia tudo o que puxou dos colegas.
         if (anterior.quantidade === qtdNova) continue;
 
         // A própria pessoa a corrigir a contagem dela: pode.
@@ -151,39 +153,48 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
           continue;
         }
 
-        // DIVERGÊNCIA: outra pessoa já contou este produto e chegou a um número
-        // diferente. NÃO se sobrescreve — era exatamente isso que fazia dois
-        // aparelhos reimporem o próprio número em looping, e o valor final
-        // acabava a ser o de quem sincronizasse por último. Os dois números são
-        // informação legítima; quem decide é uma pessoa, com recontagem.
-        conflitos.push({
-          produto_codigo: prod.codigo,
-          marca: prod.marca || null,
-          qtd_no_sistema: anterior.quantidade,
-          qtd_enviada: qtdNova,
-          conferido_por_usuario_id: anterior.conferido_por_usuario_id
-        });
+        // Número diferente do que outra pessoa contou. Isto agora só chega aqui
+        // como ACTO DELIBERADO: o app envia apenas o que acabou de ser digitado
+        // e ainda não foi confirmado, nunca o que recebeu na sincronização. Ou
+        // seja, alguém contou este produto agora — e muitas vezes está a
+        // corrigir um engano de quem contou antes, que é trabalho legítimo.
+        //
+        // Por isso a correção é ACEITE. O que não pode é acontecer em silêncio:
+        // fica registada com os dois números e as duas pessoas, e volta ao app
+        // para avisar quem corrigiu. O antigo problema não era a correção — era
+        // o eco automático do aparelho a repetir o mesmo número sem ninguém
+        // ter pedido nada.
+        const dono = await client.query(`SELECT nome FROM usuarios WHERE id = $1`, [anterior.conferido_por_usuario_id]);
+        const donoNome = dono.rows[0]?.nome || null;
 
-        // Só regista a divergência uma vez por pessoa/produto/valor: sem isto,
-        // um app antigo a reenviar tudo a cada sync repetiria a linha para
-        // sempre — trocaria a corrupção de dados por lixo no histórico.
         await client.query(
-          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes)
-           SELECT $1, $2, 'divergencia_quantidade', $3::jsonb
-            WHERE NOT EXISTS (
-                  SELECT 1 FROM historico_acoes
-                   WHERE carga_id = $1 AND usuario_id = $2
-                     AND acao = 'divergencia_quantidade'
-                     AND detalhes->>'produto_codigo' = $4
-                     AND detalhes->>'qtd_enviada' = $5)`,
-          [id, uid, JSON.stringify({
+          `UPDATE conferencias_produtos
+              SET quantidade_conferida = $3,
+                  conferido_por_usuario_id = $4,
+                  atualizado_em = CURRENT_TIMESTAMP
+            WHERE carga_id = $1 AND produto_codigo = $2`,
+          [id, prod.codigo, qtdNova, uid]
+        );
+
+        await client.query(
+          `INSERT INTO historico_acoes (carga_id, usuario_id, acao, detalhes) VALUES ($1, $2, $3, $4)`,
+          [id, uid, 'quantidade_corrigida', JSON.stringify({
             produto_codigo: prod.codigo,
             marca: prod.marca,
-            qtd_no_sistema: anterior.quantidade,
-            qtd_enviada: qtdNova,
-            conferido_por_usuario_id: anterior.conferido_por_usuario_id
-          }), prod.codigo, String(qtdNova)]
+            qtd_anterior: anterior.quantidade,
+            qtd_nova: qtdNova,
+            corrigiu_usuario_id: anterior.conferido_por_usuario_id,
+            corrigiu_usuario_nome: donoNome
+          })]
         );
+
+        correcoes.push({
+          produto_codigo: prod.codigo,
+          marca: prod.marca || null,
+          qtd_anterior: anterior.quantidade,
+          qtd_nova: qtdNova,
+          conferido_por_nome: donoNome
+        });
       }
 
       if (cargaNova) {
@@ -193,10 +204,10 @@ app.post('/cargas/:id/sincronizar', async (req, res) => {
         );
       }
 
-      return conflitos;
+      return correcoes;
     });
 
-    res.json({ sucesso: true, conflitos });
+    res.json({ sucesso: true, correcoes });
   } catch (err) {
     console.error('Erro ao sincronizar:', err);
     res.status(500).json({ error: 'Erro interno' });

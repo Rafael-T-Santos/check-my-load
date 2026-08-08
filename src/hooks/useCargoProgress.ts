@@ -132,7 +132,7 @@ export function useCargoProgress() {
         acc[p.code] = {
           checkedQuantity: p.checkedQuantity,
           isChecked: p.isChecked,
-          checkedByMe: p.checkedByMe,
+          pendingSync: p.pendingSync,
         };
         return acc;
       }, {} as CargoProgress['products']),
@@ -228,10 +228,8 @@ export function useCargoProgress() {
             ...product,
             checkedQuantity: savedProd ? savedProd.quantidade_conferida : null,
             isChecked: !!savedProd,
-            // O que vem do banco foi contado por alguém — não necessariamente
-            // por quem está a abrir a carga agora. Sem `checkedByMe`, este
-            // aparelho não reenvia (nem sobrescreve) a contagem alheia.
-            checkedByMe: false,
+            // Veio do banco, logo já está confirmado: nada a enviar.
+            pendingSync: false,
           };
         });
 
@@ -260,12 +258,11 @@ export function useCargoProgress() {
   const saveProgressToDB = useCallback(async () => {
     if (!currentCargo) return;
 
-    // 1. Prepara os produtos conferidos NESTE aparelho.
-    //    `checkedByMe` é o que separa "eu contei" de "alguém contou e eu recebi
-    //    na sincronização". Enviar o segundo grupo era o que punha dois
-    //    telemóveis a reescrever a contagem um do outro em looping.
+    // 1. Prepara APENAS o que foi contado aqui e ainda não foi confirmado pelo
+    //    servidor. Enviar o resto era o que punha dois telemóveis a reescrever
+    //    a contagem um do outro em looping, a cada sincronização.
     const produtosConferidos = products
-      .filter(p => p.checkedByMe && p.checkedQuantity !== null)
+      .filter(p => p.pendingSync && p.checkedQuantity !== null)
       .map(p => ({
         codigo: p.code,
         quantidade: p.checkedQuantity,
@@ -286,17 +283,30 @@ export function useCargoProgress() {
         });
         console.log('Progresso salvo no banco!');
 
-        // O servidor recusa sobrescrever a contagem de outra pessoa e devolve a
-        // divergência em vez de a esconder. Duas contagens diferentes do mesmo
-        // produto é exatamente o que a conferência existe para apanhar — tem de
-        // chegar a quem está no armazém, não morrer num log.
+        // Confirmado: limpa a marca de pendente para não reenviar. Só se limpa
+        // o que continua com a MESMA quantidade que foi enviada — se a pessoa
+        // contou de novo enquanto o pedido estava a viajar, o novo valor tem de
+        // continuar pendente, senão perdia-se.
+        const enviadas = new Map(produtosConferidos.map(p => [p.codigo, p.quantidade]));
+        setProducts(prev => prev.map(p =>
+          enviadas.has(p.code) && enviadas.get(p.code) === p.checkedQuantity
+            ? { ...p, pendingSync: false }
+            : p
+        ));
+
+        // O servidor avisa quando esta contagem corrigiu a de outra pessoa.
+        // A correção é aceite — o segundo conferente pode muito bem estar a
+        // consertar um engano do primeiro —, mas nunca em silêncio: os dois
+        // números e as duas pessoas ficam no histórico, e quem corrigiu vê o
+        // que mudou. Divergência é o que a conferência existe para apanhar.
         const corpo = await resposta.json().catch(() => null);
-        if (corpo?.conflitos?.length) {
-          for (const c of corpo.conflitos) {
-            toast.warning(`Divergência no produto ${c.produto_codigo} ⚠️`, {
+        if (corpo?.correcoes?.length) {
+          for (const c of corpo.correcoes) {
+            toast.warning(`Produto ${c.produto_codigo}: contagem alterada ⚠️`, {
               description:
-                `Outro conferente registou ${c.qtd_no_sistema} e você contou ${c.qtd_enviada}. ` +
-                `O valor no sistema foi mantido — confiram juntos antes de finalizar.`,
+                `${c.conferido_por_nome || 'Outro conferente'} tinha registado ` +
+                `${c.qtd_anterior} e você gravou ${c.qtd_nova}. Se não foi engano, ` +
+                `confirme com ele antes de finalizar.`,
               duration: 15000,
             });
           }
@@ -377,7 +387,7 @@ export function useCargoProgress() {
     setProducts(prev =>
       prev.map(p =>
         p.code === code
-          ? { ...p, checkedQuantity, isChecked: true, checkedByMe: true }
+          ? { ...p, checkedQuantity, isChecked: true, pendingSync: true }
           : p
       )
     );

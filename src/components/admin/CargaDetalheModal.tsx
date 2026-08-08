@@ -127,6 +127,10 @@ interface HistoricoAcao {
 const ACAO_CONFIG: Record<string, { label: string; cor: string; icon: ElementType }> = {
   carga_aberta:             { label: 'Conferência aberta',        cor: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: Unlock },
   produto_conferido:        { label: 'Produto conferido',         cor: 'bg-blue-100 text-blue-700 border-blue-200',          icon: CheckSquare },
+  // Um conferente alterou a contagem de OUTRO. É legítimo (pode estar a
+  // consertar um engano), mas é o evento que mais merece o olho de quem audita
+  // a carga — daí o vermelho.
+  quantidade_corrigida:     { label: 'Contagem alterada',         cor: 'bg-red-100 text-red-700 border-red-200',             icon: FileWarning },
   foto_adicionada:          { label: 'Foto adicionada',           cor: 'bg-purple-100 text-purple-700 border-purple-200',    icon: Camera },
   sacola_criada:            { label: 'Sacola criada',             cor: 'bg-amber-100 text-amber-700 border-amber-200',       icon: ShoppingBag },
   carga_finalizada:         { label: 'Conferência finalizada',    cor: 'bg-gray-100 text-gray-700 border-gray-200',          icon: Flag },
@@ -1129,6 +1133,17 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
                                 {det.qtd_anterior !== null && det.qtd_anterior !== undefined
                                   ? `${det.qtd_anterior} → ${det.qtd_nova}`
                                   : `Qtd: ${det.qtd_nova}`}
+                              </p>
+                            )}
+                            {item.acao === 'quantidade_corrigida' && (
+                              <p className="text-xs text-muted-foreground">
+                                Cód. {String(det.produto_codigo)}
+                                {det.marca ? ` — ${String(det.marca)}` : ''}
+                                {' · '}
+                                {`${det.qtd_anterior} → ${det.qtd_nova}`}
+                                {det.corrigiu_usuario_nome
+                                  ? ` · contagem anterior de ${String(det.corrigiu_usuario_nome)}`
+                                  : ''}
                               </p>
                             )}
                             {item.acao === 'foto_adicionada' && det.observacao && (
