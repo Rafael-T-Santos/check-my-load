@@ -1041,8 +1041,14 @@ async function importarConferencia(client, cab, itens) {
        qtd_volumes   = COALESCE(EXCLUDED.qtd_volumes, conferencias_entrada.qtd_volumes),
        atualizado_em = CURRENT_TIMESTAMP
      RETURNING id, (xmax = 0) AS inserido`,
-    [cab.nuconf, cab.nunota ?? null, cab.codemp ?? null, cab.numnota ?? null,
-     cab.fornecedor ?? null, cab.dt_prevista ?? null, cab.qtd_volumes ?? null]
+    [cab.nuconf,
+     cab.nunota ?? null,
+     cab.codemp ?? null,
+     cab.numnota ?? null,
+     // `nomeparc` aparece quando o endpoint do ERP faz JOIN em TGFPAR.
+     cab.fornecedor  ?? cab.nomeparc   ?? null,
+     cab.dt_prevista ?? cab.dtprevista ?? null,
+     cab.qtd_volumes ?? cab.qtdvolumes ?? null]
   );
 
   const conferenciaId = cabResult.rows[0].id;
@@ -1077,10 +1083,14 @@ async function importarConferencia(client, cab, itens) {
       [
         conferenciaId,
         cab.nuconf,
-        it.sequencia ?? seq,
-        it.sequencia_orig ?? it.sequenciaOrig ?? null,
+        // A internal-api-sankhya devolve as colunas do Oracle em minúsculas,
+        // então um SELECT * em AD_CONF_ENT_ITE chega como `seqconf` e
+        // `descrprod_snap`. Aceitar as duas grafias evita que a fila apareça
+        // com a descrição dos produtos em branco caso o SQL não use alias.
+        it.sequencia ?? it.seqconf ?? seq,
+        it.sequencia_orig ?? it.sequenciaOrig ?? it.sequencia_orig ?? null,
         String(it.codprod),
-        it.descrprod ?? null,
+        it.descrprod ?? it.descrprod_snap ?? null,
         it.marca ?? 'SEM MARCA',
         it.unidade ?? null,
         it.ean13 ?? null,
@@ -1173,9 +1183,9 @@ app.get('/entrada/fila', async (req, res) => {
         nunota:      cab.nunota      ?? cab.NUNOTA      ?? null,
         codemp:      cab.codemp      ?? cab.CODEMP      ?? null,
         numnota:     cab.numnota     ?? cab.NUMNOTA     ?? null,
-        fornecedor:  cab.fornecedor  ?? cab.NOMEPARC    ?? null,
-        dt_prevista: cab.dtprevista  ?? cab.DTPREVISTA  ?? null,
-        qtd_volumes: cab.qtdvolumes  ?? cab.QTDVOLUMES  ?? null,
+        fornecedor:  cab.fornecedor ?? cab.nomeparc  ?? cab.NOMEPARC  ?? null,
+        dt_prevista: cab.dtprevista ?? cab.dt_prevista ?? cab.DTPREVISTA ?? null,
+        qtd_volumes: cab.qtdvolumes ?? cab.qtd_volumes ?? cab.QTDVOLUMES ?? null,
       }, itens));
     }
   } catch (err) {

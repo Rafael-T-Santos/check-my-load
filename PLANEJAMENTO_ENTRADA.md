@@ -159,16 +159,46 @@ para SQL Server no final).
 Depois do DDL, registrar as tabelas no dicionário (TDDTAB / TDDCAM) e criar a
 ação **"Lançar Conferência"** na tela de pré-entrada.
 
-### Endpoints que o Sankhya precisa expor
+### Divisão de trabalho
+
+| Quem | O quê |
+|---|---|
+| Dev do Sankhya | Cria as tabelas `AD_CONF_ENT_*` e a ação "Lançar Conferência" na tela de pré-entrada |
+| Nós | Os três endpoints REST, no projeto **`internal-api-sankhya`** (Flask + `cx_Oracle`, tudo em `app.py`) |
+
+### Endpoints a acrescentar na `internal-api-sankhya`
+
+São o análogo direto de `/api/contagens-pendentes`, `/api/itens-contagem` e
+`/api/registrar-contagem`, que já existem para a contagem de estoque — o mesmo
+formato de resposta e o mesmo tratamento de erro servem aqui.
 
 | Método | Rota | Corpo | Resposta |
 |---|---|---|---|
-| `GET` | `/api/conferencias-entrada-pendentes` | — | `[{ nuconf, nunota, codemp, numnota, fornecedor, dtprevista, qtdvolumes }]` |
-| `POST` | `/api/itens-conferencia-entrada` | `{ nuConf }` | `[{ sequencia, sequencia_orig, codprod, descrprod, marca, unidade, ean13, ean14, fator_ean14, qtd_esperada }]` |
+| `GET` | `/api/conferencias-entrada-pendentes` | — | `{ sucesso, totalRegistros, dados: [...] }` com `nuconf, nunota, codemp, numnota, fornecedor, dtprevista, qtdvolumes` |
+| `POST` | `/api/itens-conferencia-entrada` | `{ nuConf }` | idem, com `sequencia, sequencia_orig, codprod, descrprod, marca, unidade, ean13, ean14, fator_ean14, qtd_esperada` |
 | `POST` | `/api/registrar-conferencia-entrada` | `{ nuConf, status, itens: [{ seqConf, codProd, qtdConferida, statusItem, observacao }] }` | `{ sucesso }` |
 
+O backend aceita tanto `[...]` cru quanto o envelope `{ dados: [...] }`, que é o
+padrão da `internal-api-sankhya` — não é preciso mudar a convenção.
+
+**Nomes das colunas:** a API devolve as colunas do Oracle em minúsculas
+(`col[0].lower()`), então um `SELECT *` traz `seqconf` e `descrprod_snap`, não
+`sequencia` e `descrprod`. O importador aceita as duas grafias, mas o mais
+legível é usar alias no SQL:
+
+```sql
+SELECT I.SEQCONF        AS SEQUENCIA,
+       I.DESCRPROD_SNAP AS DESCRPROD,
+       I.SEQUENCIA_ORIG, I.CODPROD, I.MARCA, I.UNIDADE,
+       I.EAN13, I.EAN14, I.FATOR_EAN14, I.QTD_ESPERADA
+  FROM AD_CONF_ENT_ITE I
+ WHERE I.NUCONF = :NUCONF
+ ORDER BY I.SEQCONF
+```
+
 `/api/itens-conferencia-entrada` **é servidor-para-servidor**: devolve
-`qtd_esperada`, mas quem chama é o backend, nunca o aplicativo.
+`qtd_esperada`, mas quem chama é o backend do Check My Load, nunca o aplicativo.
+Ele guarda o valor no Postgres e não o repassa adiante.
 
 **Enquanto o ERP não estiver pronto**, o módulo já roda inteiro via
 `POST /entrada/conferencias/importar`:
@@ -277,7 +307,7 @@ já existia — ou seja, com o `init.sql` ignorado, igual à produção.
 ## Pendente
 
 - [ ] **Criar as tabelas `AD_CONF_ENT_*` no Sankhya** e a ação "Lançar Conferência"
-- [ ] **Expor os três endpoints REST** do ERP
+- [ ] **Escrever os três endpoints** na `internal-api-sankhya` (ver seção acima)
 - [ ] **Rodar a migration 002** no banco de produção
 - [ ] Testar dois conferentes em marcas diferentes da mesma nota, em aparelhos
       reais (o `server/tests/teste-concorrencia.sh` das cargas serve de modelo)
