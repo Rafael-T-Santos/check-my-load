@@ -682,7 +682,9 @@ app.post('/admin/cargas/:id/sincronizar-placa', async (req, res) => {
 // ROTAS DE CONTAGEM DE ESTOQUE
 // ------------------------------------------------------------------
 
-const SANKHYA_URL = 'http://192.168.255.6:5000';
+// Produção por padrão; SANKHYA_URL aponta para outro ERP em teste ou noutra
+// rede sem recompilar nada.
+const SANKHYA_URL = process.env.SANKHYA_URL || 'http://192.168.255.6:5000';
 
 // Proxy: buscar contagens pendentes no Sankhya
 app.get('/sankhya/contagens-pendentes', async (req, res) => {
