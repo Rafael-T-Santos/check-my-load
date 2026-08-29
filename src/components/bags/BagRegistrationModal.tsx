@@ -10,6 +10,7 @@ import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { BagLabel, type ClienteData } from './BagLabel';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/api';
 
 interface BagRegistrationModalProps {
   isOpen: boolean;
@@ -55,7 +56,7 @@ export function BagRegistrationModal({
 
     setIsPrintLoading(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/sacolas/etiqueta-cliente', {
+      const res = await fetch(`${API_URL}/sacolas/etiqueta-cliente`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pedido: selectedOrders[0] }),

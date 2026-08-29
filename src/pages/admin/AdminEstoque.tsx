@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { API_URL } from '@/lib/api';
 
 interface ContagemAdmin {
   id: number;
@@ -55,7 +56,7 @@ const ContagemDetalheModal = ({
 
   useEffect(() => {
     setLoading(true);
-    fetch(`http://192.168.255.6:3000/admin/contagens-estoque/${contagem.id}`)
+    fetch(`${API_URL}/admin/contagens-estoque/${contagem.id}`)
       .then(r => r.json())
       .then(d => setItens(d.itens ?? []))
       .catch(() => toast.error('Erro ao carregar detalhes'))
@@ -208,7 +209,7 @@ const AdminEstoque = () => {
   const fetchContagens = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/admin/contagens-estoque');
+      const res = await fetch(`${API_URL}/admin/contagens-estoque`);
       if (res.ok) setContagens(await res.json());
     } catch {
       toast.error('Erro ao conectar com o servidor.');

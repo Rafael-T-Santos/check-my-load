@@ -1,0 +1,8 @@
+# O build do backend usa ./server como contexto, então o .dockerignore da raiz
+# não se aplica aqui. Sem este arquivo, o `COPY . .` do Dockerfile tenta
+# empacotar server/node_modules — e os symlinks de .bin fazem o carregamento do
+# contexto falhar com "archive/tar: unknown file mode". As dependências são
+# instaladas dentro da imagem pelo `npm install`, então nada disto é preciso.
+node_modules
+npm-debug.log
+.env

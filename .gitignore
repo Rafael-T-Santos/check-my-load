@@ -24,8 +24,12 @@ dist-ssr
 *.sw?
 
 # Meus arquivos locais
-.dockerignore
+# (.dockerignore saiu daqui: é configuração de build, não arquivo local. Enquanto
+#  estava ignorado, um server/.dockerignore novo era descartado em silêncio e o
+#  build do backend falhava em qualquer máquina com server/node_modules.)
 .env
+.env.local
+.env.*.local
 
 # Scripts gerados pelo Claude Code
 install.cmd

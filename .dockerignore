@@ -2,4 +2,10 @@ node_modules
 dist
 .git
 .env
+# O Vite lê .env.local no `npm run build`, que corre DENTRO da imagem. Se o
+# arquivo entrasse no contexto, o endereço de desenvolvimento ficaria assado no
+# bundle de produção e o app apontaria para localhost em todos os telemóveis —
+# sem erro visível, só telas vazias.
+.env.local
+.env.*.local
 **/node_modules

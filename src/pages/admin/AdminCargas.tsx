@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import CargaDetalheModal from '@/components/admin/CargaDetalheModal';
+import { API_URL } from '@/lib/api';
 
 export interface Carga {
   id: string;
@@ -37,7 +38,7 @@ const AdminCargas = () => {
   const fetchCargas = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/admin/cargas');
+      const res = await fetch(`${API_URL}/admin/cargas`);
       if (res.ok) setCargas(await res.json());
     } catch {
       toast.error('Erro ao conectar com o servidor.');

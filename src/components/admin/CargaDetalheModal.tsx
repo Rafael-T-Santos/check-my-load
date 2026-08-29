@@ -23,6 +23,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { API_URL, ERP_URL } from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
     setFinalizando(true);
     try {
       const adminUser = (() => { try { return JSON.parse(localStorage.getItem('usuario') || '{}'); } catch { return {}; } })();
-      const res = await fetch(`http://192.168.255.6:3000/cargas/${carga.id}/finalizar`, {
+      const res = await fetch(`${API_URL}/cargas/${carga.id}/finalizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_id: adminUser.id ?? 1, via_admin: true, motivo_admin: motivoAdmin.trim() || undefined }),
@@ -202,8 +203,8 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
     const fetchLocal = async () => {
       try {
         const [resDetalhes, resSacolas] = await Promise.all([
-          fetch(`http://192.168.255.6:3000/admin/cargas/${carga.id}`),
-          fetch(`http://192.168.255.6:3000/cargas/${carga.id}/sacolas`),
+          fetch(`${API_URL}/admin/cargas/${carga.id}`),
+          fetch(`${API_URL}/cargas/${carga.id}/sacolas`),
         ]);
         if (resDetalhes.ok) setLocalData(await resDetalhes.json());
         if (resSacolas.ok) setSacolas(await resSacolas.json());
@@ -216,7 +217,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
 
     const fetchERP = async () => {
       try {
-        const res = await fetch('http://192.168.255.6:5000/api/consultar-ordem-carga', {
+        const res = await fetch(`${ERP_URL}/api/consultar-ordem-carga`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ordemCarga: Number(carga.id) }),
@@ -227,7 +228,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
             setErpData(data.dados);
             const placaErp = data.dados[0]?.placa;
             if (placaErp && placaErp !== carga.placa) {
-              fetch(`http://192.168.255.6:3000/admin/cargas/${carga.id}/sincronizar-placa`, { method: 'POST' })
+              fetch(`${API_URL}/admin/cargas/${carga.id}/sincronizar-placa`, { method: 'POST' })
                 .then(r => r.ok ? r.json() : null)
                 .then(result => { if (result?.placa) setPlacaAtual(result.placa); })
                 .catch(() => {});
@@ -247,7 +248,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
 
     const fetchHistorico = async () => {
       try {
-        const res = await fetch(`http://192.168.255.6:3000/admin/cargas/${carga.id}/historico`);
+        const res = await fetch(`${API_URL}/admin/cargas/${carga.id}/historico`);
         if (res.ok) setHistorico(await res.json());
       } catch (e) {
         console.error('Erro ao buscar histórico:', e);

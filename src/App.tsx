@@ -7,9 +7,11 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Selecionar from "./pages/Selecionar";
 import Estoque from "./pages/Estoque";
+import Entrada from "./pages/Entrada";
 import AdminLayout from '@/pages/admin/AdminLayout';
 import AdminCargas from '@/pages/admin/AdminCargas';
 import AdminEstoque from '@/pages/admin/AdminEstoque';
+import AdminEntradas from '@/pages/admin/AdminEntradas';
 import AdminUsuarios from '@/pages/admin/AdminUsuarios';
 import NotFound from "./pages/NotFound";
 
@@ -45,9 +47,11 @@ const App = () => (
           <Route path="/selecionar" element={<PrivateRoute><Selecionar /></PrivateRoute>} />
           <Route path="/cargo"      element={<PrivateRoute><Index /></PrivateRoute>} />
           <Route path="/estoque"    element={<PrivateRoute><Estoque /></PrivateRoute>} />
+          <Route path="/entrada"    element={<PrivateRoute><Entrada /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute><AdminLayout /></PrivateRoute>}>
             <Route index element={<AdminCargas />} />
             <Route path="estoque"  element={<AdminEstoque />} />
+            <Route path="entradas" element={<AdminEntradas />} />
             <Route path="usuarios" element={<AdminUsuarios />} />
           </Route>
           

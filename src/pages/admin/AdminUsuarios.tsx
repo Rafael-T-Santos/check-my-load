@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/api';
 
 interface Usuario {
   id: number;
@@ -43,7 +44,7 @@ const AdminUsuarios = () => {
   const fetchUsuarios = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/admin/usuarios');
+      const res = await fetch(`${API_URL}/admin/usuarios`);
       if (res.ok) setUsuarios(await res.json());
     } catch {
       toast.error('Erro ao conectar com o servidor.');
@@ -78,8 +79,8 @@ const AdminUsuarios = () => {
     setIsSubmitting(true);
     const isEditing = editingUserId !== null;
     const url = isEditing
-      ? `http://192.168.255.6:3000/admin/usuarios/${editingUserId}`
-      : 'http://192.168.255.6:3000/admin/usuarios';
+      ? `${API_URL}/admin/usuarios/${editingUserId}`
+      : `${API_URL}/admin/usuarios`;
     try {
       const res = await fetch(url, {
         method: isEditing ? 'PUT' : 'POST',

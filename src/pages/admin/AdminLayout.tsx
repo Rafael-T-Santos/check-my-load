@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Package, Users, LogOut, Activity, BarChart3 } from 'lucide-react';
+import { Package, Users, LogOut, Activity, BarChart3, PackageCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { to: '/admin',          label: 'Cargas',   icon: Package,   end: true },
+  { to: '/admin/entradas', label: 'Entradas', icon: PackageCheck, end: false },
   { to: '/admin/estoque',  label: 'Estoque',  icon: BarChart3, end: false },
   { to: '/admin/usuarios', label: 'Usuários', icon: Users,     end: false },
 ];

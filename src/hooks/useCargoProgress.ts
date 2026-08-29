@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Cargo, CargoProgress, Product, PhotoRecord, AppStep, Bag, BrandStatus } from '@/types/cargo';
 import { mockCargos } from '@/data/mockCargos';
+import { API_URL, ERP_URL } from '@/lib/api';
 
 interface ApiCargoItem {
   codProd: number;
@@ -169,7 +170,7 @@ export function useCargoProgress() {
   const searchCargo = useCallback(async (cargoId: string, continueProgress = false): Promise<Cargo | null> => {
     try {
       // 1. Busca os dados originais do ERP/Sistema externo
-      const response = await fetch('http://192.168.255.6:5000/api/consultar-ordem-carga', {
+      const response = await fetch(`${ERP_URL}/api/consultar-ordem-carga`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ordemCarga: Number(cargoId) }) 
@@ -186,7 +187,7 @@ export function useCargoProgress() {
       // 2. Busca o progresso no nosso NOVO backend local
       let progressoDB = [];
       try {
-        const dbResponse = await fetch(`http://192.168.255.6:3000/cargas/${cargoId}/progresso`);
+        const dbResponse = await fetch(`${API_URL}/cargas/${cargoId}/progresso`);
         if (dbResponse.ok) {
           progressoDB = await dbResponse.json();
         }
@@ -197,7 +198,7 @@ export function useCargoProgress() {
       // 2.5 Busca as sacolas do banco de dados
       let sacolasDB: Bag[] = [];
       try {
-        const sacolasResponse = await fetch(`http://192.168.255.6:3000/cargas/${cargoId}/sacolas`);
+        const sacolasResponse = await fetch(`${API_URL}/cargas/${cargoId}/sacolas`);
         if (sacolasResponse.ok) {
           sacolasDB = await sacolasResponse.json();
           setBags(sacolasDB); // Salva no estado
@@ -208,7 +209,7 @@ export function useCargoProgress() {
 
       // 2.6 Busca as fotos do banco de dados
       try {
-        const fotosResponse = await fetch(`http://192.168.255.6:3000/cargas/${cargoId}/fotos`);
+        const fotosResponse = await fetch(`${API_URL}/cargas/${cargoId}/fotos`);
         if (fotosResponse.ok) {
           const fotosDB = await fotosResponse.json();
           setPhotos(fotosDB); // Carrega as fotos antigas na tela!
@@ -272,7 +273,7 @@ export function useCargoProgress() {
     // 2. Salva os produtos APENAS se houver algum produto conferido
     if (produtosConferidos.length > 0) {
       try {
-        const resposta = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sincronizar`, {
+        const resposta = await fetch(`${API_URL}/cargas/${currentCargo.id}/sincronizar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -319,7 +320,7 @@ export function useCargoProgress() {
     // 3. Salva as sacolas APENAS se houver alguma sacola criada, independentemente dos produtos
     if (bags.length > 0) {
       try {
-        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
+        await fetch(`${API_URL}/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -351,7 +352,7 @@ export function useCargoProgress() {
       await saveProgressToDB();
 
       // 2. Busca as novidades que outros usuários podem ter feito (Pull)
-      const dbResponse = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/progresso`);
+      const dbResponse = await fetch(`${API_URL}/cargas/${currentCargo.id}/progresso`);
       if (dbResponse.ok) {
         const progressoDB = await dbResponse.json();
         
@@ -368,7 +369,7 @@ export function useCargoProgress() {
           return product;
         }));
         //Atualiza as sacolas com o que veio do banco
-        const sacolasResponse = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`);
+        const sacolasResponse = await fetch(`${API_URL}/cargas/${currentCargo.id}/sacolas`);
         if (sacolasResponse.ok) {
           const sacolasDB = await sacolasResponse.json();
           setBags(sacolasDB);
@@ -415,7 +416,7 @@ export function useCargoProgress() {
 
     if (currentCargo) {
       try {
-        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
+        await fetch(`${API_URL}/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fotos: [newPhoto], usuario_id: getLoggedUserId() }),
@@ -438,7 +439,7 @@ export function useCargoProgress() {
 
     if (currentCargo) {
       try {
-        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
+        await fetch(`${API_URL}/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fotos: [newPhoto], usuario_id: getLoggedUserId() }),
@@ -603,7 +604,7 @@ export function useCargoProgress() {
       const newBags = [...prev, bag];
       // Dispara o salvamento no banco em segundo plano imediatamente
       if (currentCargo) {
-        fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
+        fetch(`${API_URL}/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
@@ -617,7 +618,7 @@ export function useCargoProgress() {
     setBags(prev => {
       const newBags = prev.map(b => b.id === bagId ? { ...b, ...updates } : b);
       if (currentCargo) {
-        fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
+        fetch(`${API_URL}/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
@@ -631,7 +632,7 @@ export function useCargoProgress() {
     setBags(prev => {
       const newBags = prev.filter(b => b.id !== bagId);
       if (currentCargo) {
-        fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/sacolas`, {
+        fetch(`${API_URL}/cargas/${currentCargo.id}/sacolas`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sacolas: newBags, usuario_id: getLoggedUserId() })
@@ -666,7 +667,7 @@ export function useCargoProgress() {
   const proceedWithJustification = useCallback(async (justificativa: string) => {
     if (!currentCargo) return;
     try {
-      const res = await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/observacoes`, {
+      const res = await fetch(`${API_URL}/cargas/${currentCargo.id}/observacoes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ justificativa, usuario_id: getLoggedUserId() }),
@@ -691,7 +692,7 @@ export function useCargoProgress() {
       // 2. Envia apenas fotos de finalização (produto e pedido já foram enviadas individualmente)
       const fotosFinalizacao = photos.filter(p => !p.produtoCodigo && !p.pedidoId);
       if (fotosFinalizacao.length > 0) {
-        await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/fotos`, {
+        await fetch(`${API_URL}/cargas/${currentCargo.id}/fotos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -703,7 +704,7 @@ export function useCargoProgress() {
       }
 
       // 3. Finaliza a carga no banco
-      await fetch(`http://192.168.255.6:3000/cargas/${currentCargo.id}/finalizar`, {
+      await fetch(`${API_URL}/cargas/${currentCargo.id}/finalizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario_id: getLoggedUserId() })
