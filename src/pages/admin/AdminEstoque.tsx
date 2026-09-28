@@ -2,9 +2,15 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw, Search, BarChart3, CheckCircle, Clock,
   TrendingUp, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, X,
+  CheckCheck, AlertTriangle, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -46,13 +52,44 @@ interface ItemDetalhe {
 const ContagemDetalheModal = ({
   contagem,
   onClose,
+  onStatusChange,
 }: {
   contagem: ContagemAdmin;
   onClose: () => void;
+  onStatusChange: (id: number, status: string) => void;
 }) => {
   const [itens, setItens] = useState<ItemDetalhe[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchItem, setSearchItem] = useState('');
+  const [status, setStatus] = useState(contagem.status);
+  const [showConfirmFinalizar, setShowConfirmFinalizar] = useState(false);
+  const [motivoAdmin, setMotivoAdmin] = useState('');
+  const [finalizando, setFinalizando] = useState(false);
+
+  const handleFinalizar = async () => {
+    setFinalizando(true);
+    try {
+      const adminUser = (() => { try { return JSON.parse(localStorage.getItem('usuario') || '{}'); } catch { return {}; } })();
+      const res = await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/finalizar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: adminUser.id ?? 1, via_admin: true, motivo_admin: motivoAdmin.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Falha ao finalizar contagem');
+      }
+      setStatus('finalizada');
+      setShowConfirmFinalizar(false);
+      setMotivoAdmin('');
+      onStatusChange(contagem.id, 'finalizada');
+      toast.success(`Contagem #${contagem.nucontagem} finalizada e enviada ao Sankhya.`);
+    } catch (err) {
+      toast.error('Erro ao finalizar contagem.', { description: (err as Error).message });
+    } finally {
+      setFinalizando(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -87,19 +124,33 @@ const ContagemDetalheModal = ({
                 <span className="text-xs text-muted-foreground">Local: {contagem.codlocal}</span>
               )}
               <Badge
-                variant={contagem.status === 'finalizada' ? 'default' : 'secondary'}
-                className={cn(contagem.status === 'finalizada' && 'bg-emerald-500 hover:bg-emerald-600')}
+                variant={status === 'finalizada' ? 'default' : 'secondary'}
+                className={cn(status === 'finalizada' && 'bg-emerald-500 hover:bg-emerald-600')}
               >
-                {contagem.status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
+                {status === 'finalizada' ? 'Finalizada' : 'Em Andamento'}
               </Badge>
               {contagem.usuario && (
                 <span className="text-xs text-muted-foreground">por {contagem.usuario}</span>
               )}
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 shrink-0">
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {status !== 'finalizada' && (
+              <Button
+                size="sm"
+                onClick={() => setShowConfirmFinalizar(true)}
+                disabled={loading || totalContados === 0}
+                title={totalContados === 0 ? 'Nenhum item contado ainda' : undefined}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <CheckCheck className="h-4 w-4 mr-1.5" />
+                Finalizar
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         <div className="px-6 py-3 border-b bg-muted/30 flex gap-6 text-sm">
@@ -186,6 +237,64 @@ const ContagemDetalheModal = ({
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={showConfirmFinalizar}
+        onOpenChange={open => { if (!finalizando) setShowConfirmFinalizar(open); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              Finalizar contagem #{contagem.nucontagem}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <div className="bg-red-50 border border-red-200 rounded-md p-3 text-red-800">
+                  <p className="font-semibold">Ao finalizar por aqui:</p>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    <li>
+                      Os <strong>{totalContados}</strong> itens contados serão enviados ao <strong>Sankhya</strong>
+                    </li>
+                    {itens.length - totalContados > 0 && (
+                      <li>
+                        <strong>{itens.length - totalContados}</strong> itens sem contagem <strong>não serão enviados</strong>
+                      </li>
+                    )}
+                    <li>Ficará registrado no histórico que foi o <strong>painel admin</strong> que finalizou</li>
+                  </ul>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-foreground">
+                    Motivo da finalização pelo admin <span className="text-muted-foreground">(obrigatório)</span>
+                  </label>
+                  <Textarea
+                    placeholder="Ex: Conferente sem acesso ao app, itens restantes fora de linha..."
+                    value={motivoAdmin}
+                    onChange={e => setMotivoAdmin(e.target.value)}
+                    rows={3}
+                    className="text-sm resize-none"
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={finalizando} onClick={() => setMotivoAdmin('')}>
+              Cancelar
+            </AlertDialogCancel>
+            <Button
+              onClick={handleFinalizar}
+              disabled={finalizando || motivoAdmin.trim().length < 10}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {finalizando
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Enviando ao Sankhya...</>
+                : 'Confirmar finalização'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
@@ -420,6 +529,9 @@ const AdminEstoque = () => {
         <ContagemDetalheModal
           contagem={selectedContagem}
           onClose={() => setSelectedContagem(null)}
+          onStatusChange={(id, status) =>
+            setContagens(prev => prev.map(c => (c.id === id ? { ...c, status } : c)))
+          }
         />
       )}
     </div>

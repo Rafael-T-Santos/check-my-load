@@ -819,10 +819,15 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
 });
 
 // Finalizar contagem de estoque (envia ao Sankhya + marca como finalizada)
+// Com via_admin, o painel finaliza mesmo com itens sem contagem: só os contados vão ao Sankhya.
 app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
   const { nucontagem } = req.params;
-  const { usuario_id, total_itens } = req.body;
+  const { usuario_id, total_itens, via_admin, motivo_admin } = req.body;
   const uid = usuario_id || 1;
+
+  if (via_admin && (!motivo_admin || motivo_admin.trim().length < 10)) {
+    return res.status(400).json({ error: 'Informe o motivo da finalização (mínimo 10 caracteres).' });
+  }
 
   try {
     const itenResult = await pool.query(
@@ -838,7 +843,7 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
     }
 
     // Valida se todos os itens do app chegaram ao banco antes de finalizar
-    if (total_itens !== undefined && itenResult.rows.length < Number(total_itens)) {
+    if (!via_admin && total_itens !== undefined && itenResult.rows.length < Number(total_itens)) {
       return res.status(400).json({
         error: `Sincronização incompleta: ${itenResult.rows.length} de ${total_itens} itens salvos no banco. Sincronize e tente novamente.`,
       });
@@ -862,6 +867,20 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
       return res.status(502).json({ error: 'Erro ao registrar contagem no ERP', detail: errBody });
     }
 
+    const detalhes = { itens_enviados: itensParaSankhya.length };
+    if (via_admin) {
+      const semContagem = await pool.query(
+        `SELECT COUNT(*)::INT AS n FROM contagens_estoque_produtos
+         WHERE contagem_id = $1 AND estoque_contagem IS NULL`,
+        [contagemId]
+      );
+      Object.assign(detalhes, {
+        via_admin:          true,
+        motivo:             motivo_admin.trim(),
+        itens_sem_contagem: semContagem.rows[0].n,
+      });
+    }
+
     await comTransacao(async (client) => {
       await client.query(
         `UPDATE contagens_estoque
@@ -872,8 +891,7 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
       await client.query(
         `INSERT INTO historico_contagens_estoque (contagem_id, usuario_id, acao, detalhes)
          VALUES ($1, $2, $3, $4)`,
-        [contagemId, uid, 'contagem_finalizada',
-         JSON.stringify({ itens_enviados: itensParaSankhya.length })]
+        [contagemId, uid, 'contagem_finalizada', JSON.stringify(detalhes)]
       );
     });
 
