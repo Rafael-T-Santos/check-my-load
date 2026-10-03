@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { API_URL } from '@/lib/api';
 
 interface Carga {
   id: string;
@@ -72,8 +73,8 @@ const Admin = () => {
   const fetchAdminData = async () => {
     try {
       const [resCargas, resUsuarios] = await Promise.all([
-        fetch('http://192.168.255.6:3000/admin/cargas'),
-        fetch('http://192.168.255.6:3000/admin/usuarios')
+        fetch(`${API_URL}/admin/cargas`),
+        fetch(`${API_URL}/admin/usuarios`)
       ]);
 
       if (resCargas.ok) setCargas(await resCargas.json());
@@ -92,7 +93,7 @@ const Admin = () => {
     setIsCargaModalOpen(true);
 
     try {
-      const response = await fetch(`http://192.168.255.6:3000/admin/cargas/${cargaId}`);
+      const response = await fetch(`${API_URL}/admin/cargas/${cargaId}`);
       if (response.ok) {
         const data = await response.json();
         setCargaDetalhes(data);
@@ -147,8 +148,8 @@ const Admin = () => {
 
     const isEditing = editingUserId !== null;
     const url = isEditing 
-      ? `http://192.168.255.6:3000/admin/usuarios/${editingUserId}` 
-      : 'http://192.168.255.6:3000/admin/usuarios';
+      ? `${API_URL}/admin/usuarios/${editingUserId}` 
+      : `${API_URL}/admin/usuarios`;
     const method = isEditing ? 'PUT' : 'POST';
 
     try {

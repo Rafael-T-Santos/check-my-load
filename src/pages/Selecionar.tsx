@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Package, LogOut, Truck, BarChart3 } from 'lucide-react';
+import { Package, LogOut, Truck, BarChart3, PackageCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -39,7 +39,7 @@ const Selecionar = () => {
           <p className="text-muted-foreground text-sm mt-1">Selecione o tipo de atividade</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
           <Card
             className="cursor-pointer hover:border-primary transition-colors group"
             onClick={() => navigate('/cargo')}
@@ -66,6 +66,20 @@ const Selecionar = () => {
               <div>
                 <p className="font-semibold text-base">Contagem de Estoque</p>
                 <p className="text-xs text-muted-foreground mt-1">Contar e registrar estoque físico</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:border-primary transition-colors group"
+            onClick={() => navigate('/entrada')}
+          >
+            <CardContent className="p-6 flex flex-col items-center gap-3 text-center">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 group-hover:bg-primary/20 transition-colors flex items-center justify-center">
+                <PackageCheck className="h-7 w-7 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold text-base">Conferência de Entrada</p>
+                <p className="text-xs text-muted-foreground mt-1">Conferir mercadorias recebidas do fornecedor</p>
               </div>
             </CardContent>
           </Card>

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import { ContagemPendente, ItemEstoque, EstoqueStep } from '@/types/estoque';
+import { API_URL } from '@/lib/api';
 
 function getLoggedUserId(): number {
   try {
@@ -25,7 +26,7 @@ export function useEstoqueProgress() {
   const carregarContagens = useCallback(async () => {
     setLoadingContagens(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/sankhya/contagens-pendentes');
+      const res = await fetch(`${API_URL}/sankhya/contagens-pendentes`);
       if (!res.ok) throw new Error('Falha ao buscar contagens');
       const raw = await res.json();
       const lista = Array.isArray(raw) ? raw : (raw.dados ?? []);
@@ -38,7 +39,7 @@ export function useEstoqueProgress() {
   const selecionarContagem = useCallback(async (contagem: ContagemPendente) => {
     setLoadingItens(true);
     try {
-      const res = await fetch('http://192.168.255.6:3000/sankhya/itens-contagem', {
+      const res = await fetch(`${API_URL}/sankhya/itens-contagem`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nuContagem: contagem.nucontagem }),
@@ -49,7 +50,7 @@ export function useEstoqueProgress() {
 
       let progressoDB: any[] = [];
       try {
-        const dbRes = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagem.nucontagem}/progresso`);
+        const dbRes = await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/progresso`);
         if (dbRes.ok) progressoDB = await dbRes.json();
       } catch {
         console.warn('Progresso não encontrado no banco local');
@@ -122,7 +123,7 @@ export function useEstoqueProgress() {
         }));
 
       if (itensSalvar.length > 0) {
-        await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagem.nucontagem}/sincronizar`, {
+        await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/sincronizar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -137,7 +138,7 @@ export function useEstoqueProgress() {
         });
       }
 
-      const dbRes = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagem.nucontagem}/progresso`);
+      const dbRes = await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/progresso`);
       if (dbRes.ok) {
         const progressoDB: any[] = await dbRes.json();
         setItens(prev => prev.map(item => {
@@ -167,7 +168,7 @@ export function useEstoqueProgress() {
       // silent=true evita toast duplicado se syncWithServer falhar (task #8)
       await syncWithServer(undefined, undefined, true);
 
-      const res = await fetch('http://192.168.255.6:3000/sankhya/itens-contagem', {
+      const res = await fetch(`${API_URL}/sankhya/itens-contagem`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nuContagem: contagemAtual.nucontagem }),
@@ -177,7 +178,7 @@ export function useEstoqueProgress() {
       const sankhyaItens: any[] = Array.isArray(rawItens) ? rawItens : (rawItens.dados ?? []);
 
       let progressoDB: any[] = [];
-      const dbRes = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagemAtual.nucontagem}/progresso`);
+      const dbRes = await fetch(`${API_URL}/estoque/contagens/${contagemAtual.nucontagem}/progresso`);
       if (dbRes.ok) progressoDB = await dbRes.json();
 
       const itensMesclados: ItemEstoque[] = sankhyaItens.map(item => {
@@ -213,7 +214,7 @@ export function useEstoqueProgress() {
     if (!contagemAtual) return;
     await syncWithServer();
 
-    const res = await fetch(`http://192.168.255.6:3000/estoque/contagens/${contagemAtual.nucontagem}/finalizar`, {
+    const res = await fetch(`${API_URL}/estoque/contagens/${contagemAtual.nucontagem}/finalizar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

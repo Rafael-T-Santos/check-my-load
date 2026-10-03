@@ -14,6 +14,24 @@ export interface Product {
   totalQuantity: number;
   checkedQuantity: number | null;
   isChecked: boolean;
+  /**
+   * Contagem feita aqui e ainda NÃO confirmada pelo servidor.
+   *
+   * É o único critério de envio. Duas razões:
+   *
+   * 1. `isChecked` não serve: a sincronização de mão dupla marca como conferido
+   *    também o que veio dos colegas (a tela mostra o progresso da carga toda),
+   *    e enviar isso fazia o aparelho devolver trabalho alheio como se fosse seu.
+   *
+   * 2. "O que eu contei" também não serve: o aparelho reenviaria a própria
+   *    contagem a cada sincronização, para sempre. Foi assim que dois telemóveis
+   *    passaram uma hora a reimpor 60 e 97 um por cima do outro.
+   *
+   * Com esta marca, um número só sai daqui quando alguém acabou de o digitar.
+   * Toda escrita que chega ao servidor é, por construção, um acto deliberado —
+   * e por isso pode corrigir a contagem de outra pessoa sem medo de eco.
+   */
+  pendingSync?: boolean;
   hasBarcode: boolean;
 }
 
@@ -64,7 +82,7 @@ export interface OrderInfo {
 
 export interface CargoProgress {
   cargoId: string;
-  products: Record<string, { checkedQuantity: number | null; isChecked: boolean }>;
+  products: Record<string, { checkedQuantity: number | null; isChecked: boolean; pendingSync?: boolean }>;
   photos: PhotoRecord[];
   bags: Bag[];
   currentStep: 'brand-selection' | 'verification' | 'photos' | 'completed';

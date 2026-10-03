@@ -1,0 +1,66 @@
+{
+  "_comentario": [
+    "Conferência de exemplo para testar o módulo de entrada ANTES de as tabelas",
+    "AD_CONF_ENT_* e os endpoints do Sankhya existirem.",
+    "",
+    "  curl -X POST http://192.168.255.6:3000/entrada/conferencias/importar \\",
+    "       -H 'Content-Type: application/json' \\",
+    "       -d @server/sankhya/exemplo-importar.json",
+    "",
+    "Os itens cobrem os quatro casos que a tela precisa distinguir:",
+    "  1001 - tem EAN13 e EAN14 (caixa de 12): testa a soma por leitura de caixa",
+    "  1002 - só EAN13: some a seção de caixa; conte 8 para ver a divergência",
+    "  1003 - sem EAN nenhum: conta direto, sem exigir bipagem",
+    "  2001 - outra marca: vira um segundo cartão na fila, para testar o lock",
+    "",
+    "Para repetir o teste do zero:",
+    "  docker compose exec -T db psql -U checkmyload -d checkmyloaddb \\",
+    "    -c \"DELETE FROM conferencias_entrada WHERE nuconf = 9001;\""
+  ],
+
+  "cabecalho": {
+    "nuconf": 9001,
+    "nunota": 55001,
+    "codemp": 1,
+    "numnota": "12345",
+    "fornecedor": "FORTLEV INDUSTRIA",
+    "dt_prevista": "2026-09-02",
+    "qtd_volumes": 30
+  },
+
+  "itens": [
+    {
+      "codprod": "1001",
+      "descrprod": "Caixa d'agua 500L",
+      "marca": "FORTLEV",
+      "unidade": "UN",
+      "ean13": "7891234567895",
+      "ean14": "17891234567892",
+      "fator_ean14": 12,
+      "qtd_esperada": 36
+    },
+    {
+      "codprod": "1002",
+      "descrprod": "Tampa para caixa 500L",
+      "marca": "FORTLEV",
+      "unidade": "UN",
+      "ean13": "7891234567901",
+      "qtd_esperada": 10
+    },
+    {
+      "codprod": "1003",
+      "descrprod": "Conexao 25mm",
+      "marca": "FORTLEV",
+      "unidade": "UN",
+      "qtd_esperada": 5
+    },
+    {
+      "codprod": "2001",
+      "descrprod": "Perfil PVC 6m",
+      "marca": "PERFILPLAST",
+      "unidade": "PC",
+      "ean13": "7899876543210",
+      "qtd_esperada": 20
+    }
+  ]
+}

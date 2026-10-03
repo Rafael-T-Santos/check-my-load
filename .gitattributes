@@ -1,0 +1,4 @@
+# Scripts de shell TÊM de chegar ao Linux com quebra de linha LF. Se forem
+# gravados com CRLF (o padrão do Windows), o servidor falha com o erro pouco
+# óbvio "$'\r': command not found" logo na primeira linha.
+*.sh text eol=lf
