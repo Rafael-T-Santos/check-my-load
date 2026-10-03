@@ -747,13 +747,20 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
   // dano nos dados e a contagem de estoque parece ter um dono só por sessão — mas isso
   // ainda não foi verificado. Ver a consulta de conferência no relatório da investigação.
   try {
-    await comTransacao(async (client) => {
+    const resultado = await comTransacao(async (client) => {
+      // Contagem finalizada já foi gravada no Sankhya: aceitar itens aqui faria o banco local
+      // divergir do ERP, e antes este upsert ainda a rebaixava para 'em_andamento'.
+      const existente = await client.query(
+        `SELECT status FROM contagens_estoque WHERE nucontagem = $1 FOR UPDATE`,
+        [nucontagem]
+      );
+      if (existente.rows[0]?.status === 'finalizada') return { finalizada: true };
+
       const contagemResult = await client.query(
         `INSERT INTO contagens_estoque (nucontagem, codigo, descricao_marca, codlocal, usuario_id)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (nucontagem) DO UPDATE
            SET descricao_marca = COALESCE(EXCLUDED.descricao_marca, contagens_estoque.descricao_marca),
-               status          = 'em_andamento',
                atualizado_em   = CURRENT_TIMESTAMP
          RETURNING id, (xmax = 0) AS inserido`,
         [nucontagem, contagem?.codigo || null, contagem?.descricao_marca || null, contagem?.codlocal || null, uid]
@@ -809,8 +816,12 @@ app.post('/estoque/contagens/:nucontagem/sincronizar', async (req, res) => {
           [contagemId, uid, 'contagem_aberta', JSON.stringify({})]
         );
       }
+      return { finalizada: false };
     });
 
+    if (resultado.finalizada) {
+      return res.status(409).json({ error: 'Esta contagem já foi finalizada e não aceita alterações.' });
+    }
     res.json({ sucesso: true });
   } catch (err) {
     console.error('Erro ao sincronizar contagem de estoque:', err);
@@ -830,6 +841,14 @@ app.post('/estoque/contagens/:nucontagem/finalizar', async (req, res) => {
   }
 
   try {
+    const statusResult = await pool.query(
+      `SELECT status FROM contagens_estoque WHERE nucontagem = $1`,
+      [nucontagem]
+    );
+    if (statusResult.rows[0]?.status === 'finalizada') {
+      return res.status(409).json({ error: 'Esta contagem já foi finalizada.' });
+    }
+
     const itenResult = await pool.query(
       `SELECT cep.codprod, cep.estoque_contagem::FLOAT as estoque_contagem, ce.id as contagem_id
        FROM contagens_estoque_produtos cep

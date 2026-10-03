@@ -123,7 +123,7 @@ export function useEstoqueProgress() {
         }));
 
       if (itensSalvar.length > 0) {
-        await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/sincronizar`, {
+        const syncRes = await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/sincronizar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -136,6 +136,14 @@ export function useEstoqueProgress() {
             },
           }),
         });
+        // 409: a contagem já foi finalizada (pelo admin, ou noutro aparelho). Avisa mesmo em modo
+        // silencioso, porque as alterações locais não foram gravadas; o recarregamento abaixo
+        // traz de volta os valores que foram enviados ao Sankhya.
+        if (syncRes.status === 409) {
+          toast.error('Contagem já finalizada', {
+            description: 'Esta contagem foi finalizada e não aceita mais alterações.',
+          });
+        }
       }
 
       const dbRes = await fetch(`${API_URL}/estoque/contagens/${contagem.nucontagem}/progresso`);
