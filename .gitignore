@@ -33,3 +33,5 @@ dist-ssr
 
 # Scripts gerados pelo Claude Code
 install.cmd
+# Fotos gravadas pelo backend fora do Docker (server/fotos.js)
+server/fotos/

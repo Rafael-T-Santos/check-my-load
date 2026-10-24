@@ -4,6 +4,7 @@ import { X, Camera, ImageIcon, ArrowLeft } from 'lucide-react';
 import { PhotoRecord } from '@/types/cargo';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { comprimirFoto } from '@/lib/fotos';
 
 interface OrderPhotoModalProps {
   orderId: string;
@@ -12,21 +13,6 @@ interface OrderPhotoModalProps {
   photos: PhotoRecord[];
   onClose: () => void;
   onAddPhoto: (imageData: string, observation: string) => Promise<void>;
-}
-
-function compressImage(dataUrl: string, maxWidth = 1280, quality = 0.75): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.width);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.src = dataUrl;
-  });
 }
 
 export function OrderPhotoModal({ orderId, customerName, isOpen, photos, onClose, onAddPhoto }: OrderPhotoModalProps) {
@@ -38,12 +24,11 @@ export function OrderPhotoModal({ orderId, customerName, isOpen, photos, onClose
   const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const compressed = await compressImage(reader.result as string);
-      setCapturedImage(compressed);
-    };
-    reader.readAsDataURL(file);
+    try {
+      setCapturedImage(await comprimirFoto(file));
+    } catch (err) {
+      console.error('Erro ao comprimir foto:', err);
+    }
   };
 
   const handleSave = async () => {

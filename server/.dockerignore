@@ -6,3 +6,7 @@
 node_modules
 npm-debug.log
 .env
+
+# Fotos gravadas em disco (server/fotos.js). Em produção ficam no volume
+# Docker; esta pasta só existe quando o backend roda fora do Docker.
+fotos

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { API_URL, ERP_URL } from '@/lib/api';
+import { baixarFoto, fotoSrc } from '@/lib/fotos';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -426,13 +427,11 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
   const isLoading = loadingLocal || loadingERP;
   const formatarData = (d: string) => d ? new Date(d).toLocaleString('pt-BR') : '-';
 
-  const handleDownload = useCallback((src: string, filename: string) => {
-    const link = document.createElement('a');
-    link.href = src.startsWith('data:') ? src : `data:image/jpeg;base64,${src}`;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = useCallback((src: string, nome: string) => {
+    baixarFoto(src, nome).catch((err) => {
+      console.error('Erro ao baixar foto:', err);
+      toast.error('Não foi possível baixar a foto');
+    });
   }, []);
 
   // ─── Render helpers ───────────────────────────────────────────────────────
@@ -1330,7 +1329,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 className="h-8 w-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                onClick={() => handleDownload(lightbox.src, `foto-carga-${carga.id}-${Date.now()}.jpg`)}
+                onClick={() => handleDownload(lightbox.src, `foto-carga-${carga.id}-${Date.now()}`)}
                 title="Baixar foto"
               >
                 <Download className="h-4 w-4" />
@@ -1345,7 +1344,7 @@ const CargaDetalheModal = ({ carga, onClose, onStatusChange }: Props) => {
             </div>
           </div>
           <img
-            src={lightbox.src.startsWith('data:') ? lightbox.src : `data:image/jpeg;base64,${lightbox.src}`}
+            src={fotoSrc(lightbox.src)}
             alt={lightbox.observacao || 'Foto'}
             className="max-h-[80vh] w-full object-contain rounded-lg"
           />

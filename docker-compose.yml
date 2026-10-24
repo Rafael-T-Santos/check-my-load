@@ -20,6 +20,11 @@ services:
       - "3000:3000"
     environment:
       - DB_HOST=db
+      - FOTOS_DIR=/app/fotos
+    volumes:
+      # Fotos das conferências (server/fotos.js). Volume nomeado: sobrevive a
+      # rebuild e recriação do container, como o pgdata.
+      - fotos:/app/fotos
     depends_on:
       - db
 
@@ -34,3 +39,4 @@ services:
 
 volumes:
   pgdata:
+  fotos:
