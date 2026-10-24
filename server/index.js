@@ -1,10 +1,20 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const fotosArquivo = require('./fotos');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Limite aumentado para aceitar fotos em Base64
+
+// Fotos em disco. O nome é um UUID, então o arquivo nunca muda: pode ficar em
+// cache no aparelho para sempre.
+app.use(fotosArquivo.PREFIXO_URL, express.static(fotosArquivo.FOTOS_DIR, {
+  index: false,
+  dotfiles: 'deny',
+  immutable: true,
+  maxAge: '365d',
+}));
 
 // Ligação ao banco de dados
 const pool = new Pool({
@@ -62,10 +72,12 @@ app.get('/cargas/:id/fotos', async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
-      'SELECT id, imagem_base64 as "imageData", observacao as "observation", capturado_em as "capturedAt", produto_codigo as "produtoCodigo", pedido_id as "pedidoId" FROM fotos WHERE carga_id = $1',
+      'SELECT id, arquivo, imagem_base64, observacao as "observation", capturado_em as "capturedAt", produto_codigo as "produtoCodigo", pedido_id as "pedidoId" FROM fotos WHERE carga_id = $1',
       [id]
     );
-    res.json(result.rows);
+    res.json(result.rows.map(({ arquivo, imagem_base64, ...f }) => ({
+      ...f, imageData: fotosArquivo.urlFoto(req, arquivo, imagem_base64),
+    })));
   } catch (err) {
     console.error('Erro ao buscar fotos:', err);
     res.status(500).json({ error: 'Erro interno' });
@@ -220,7 +232,11 @@ app.post('/cargas/:id/fotos', async (req, res) => {
   const { fotos, usuario_id, placa } = req.body;
   const uid = usuario_id || 1;
 
+  let novas = new Map();
+  const descartar = [];
   try {
+    novas = await fotosArquivo.prepararFotosNovas(pool, 'fotos', fotos);
+
     await comTransacao(async (client) => {
       const cargaResult = await client.query(
         `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
@@ -232,12 +248,18 @@ app.post('/cargas/:id/fotos', async (req, res) => {
       const cargaNova = cargaResult.rows[0]?.inserido === true;
 
       for (const foto of fotos) {
+        // Só entra o que virou arquivo agora; o resto já existia no banco.
+        const arquivo = novas.get(String(foto.id));
+        if (!arquivo) continue;
+
         const fotoResult = await client.query(
-          `INSERT INTO fotos (id, carga_id, usuario_id, imagem_base64, observacao, produto_codigo, pedido_id)
+          `INSERT INTO fotos (id, carga_id, usuario_id, arquivo, observacao, produto_codigo, pedido_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (id) DO NOTHING RETURNING id`,
-          [foto.id, id, uid, foto.imageData, foto.observation, foto.produtoCodigo || null, foto.pedidoId || null]
+          [foto.id, id, uid, arquivo, foto.observation, foto.produtoCodigo || null, foto.pedidoId || null]
         );
+        // Outro envio da mesma foto ganhou a corrida: este arquivo sobrou.
+        if (fotoResult.rowCount === 0) descartar.push(arquivo);
 
         if (fotoResult.rowCount > 0) {
           await client.query(
@@ -258,8 +280,10 @@ app.post('/cargas/:id/fotos', async (req, res) => {
       }
     });
 
+    await fotosArquivo.apagarArquivos(descartar);
     res.json({ sucesso: true });
   } catch (err) {
+    await fotosArquivo.apagarArquivos([...novas.values()]);
     console.error('Erro ao salvar fotos:', err);
     res.status(500).json({ error: 'Erro ao salvar fotos' });
   }
@@ -342,7 +366,7 @@ app.get('/cargas/:id/sacolas', async (req, res) => {
     for (const row of sacolasResult.rows) {
       const pedidosResult = await pool.query('SELECT pedido_id FROM sacolas_pedidos WHERE sacola_id = $1', [row.id]);
       const produtosResult = await pool.query('SELECT produto_codigo as code, descricao as description, quantidade::FLOAT as quantity FROM sacolas_produtos WHERE sacola_id = $1', [row.id]);
-      const fotosResult = await pool.query('SELECT id, imagem_base64 as "imageData", observacao as observation, capturado_em as "capturedAt" FROM sacolas_fotos WHERE sacola_id = $1', [row.id]);
+      const fotosResult = await pool.query('SELECT id, arquivo, imagem_base64, observacao as observation, capturado_em as "capturedAt" FROM sacolas_fotos WHERE sacola_id = $1', [row.id]);
 
       // Busca quais pedidos deram origem a cada produto na sacola
       const produtosFormatados = produtosResult.rows.map(p => ({
@@ -355,7 +379,9 @@ app.get('/cargas/:id/sacolas', async (req, res) => {
         createdAt: row.criado_em,
         orders: pedidosResult.rows.map(p => p.pedido_id),
         products: produtosFormatados,
-        photos: fotosResult.rows
+        photos: fotosResult.rows.map(({ arquivo, imagem_base64, ...f }) => ({
+          ...f, imageData: fotosArquivo.urlFoto(req, arquivo, imagem_base64),
+        }))
       });
     }
 
@@ -372,7 +398,13 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
   const { sacolas, usuario_id, placa } = req.body;
   const uid = usuario_id || 1;
 
+  let novas = new Map();
+  const descartar = [];
   try {
+    novas = await fotosArquivo.prepararFotosNovas(
+      pool, 'sacolas_fotos', (sacolas || []).flatMap(s => s.photos || [])
+    );
+
     await comTransacao(async (client) => {
       const cargaResult = await client.query(
         `INSERT INTO conferencias_cargas (id, placa) VALUES ($1, $2)
@@ -422,14 +454,18 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
           );
         }
 
-        // 4. Insere as fotos
-        for (const foto of sacola.photos) {
-          await client.query(
-            `INSERT INTO sacolas_fotos (id, sacola_id, imagem_base64, observacao, capturado_em)
+        // 4. Insere as fotos. A sincronização reenvia todas; só as que
+        // viraram arquivo agora (as novas) entram.
+        for (const foto of sacola.photos || []) {
+          const arquivo = novas.get(String(foto.id));
+          if (!arquivo) continue;
+          const fotoResult = await client.query(
+            `INSERT INTO sacolas_fotos (id, sacola_id, arquivo, observacao, capturado_em)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (id) DO NOTHING`,
-            [foto.id, sacola.id, foto.imageData, foto.observation || null, foto.capturedAt || new Date()]
+            [foto.id, sacola.id, arquivo, foto.observation || null, foto.capturedAt || new Date()]
           );
+          if (fotoResult.rowCount === 0) descartar.push(arquivo);
         }
       }
 
@@ -441,8 +477,10 @@ app.post('/cargas/:id/sacolas', async (req, res) => {
       }
     });
 
+    await fotosArquivo.apagarArquivos(descartar);
     res.json({ sucesso: true });
   } catch (err) {
+    await fotosArquivo.apagarArquivos([...novas.values()]);
     console.error('Erro ao salvar sacolas:', err);
     res.status(500).json({ error: 'Erro ao salvar sacolas' });
   }
@@ -558,7 +596,7 @@ app.get('/admin/cargas/:id', async (req, res) => {
 
     // Busca as fotos da carga
     const fotos = await pool.query(
-      `SELECT f.id, f.imagem_base64, f.observacao, f.capturado_em, f.produto_codigo, f.pedido_id, u.nome as conferente
+      `SELECT f.id, f.arquivo, f.imagem_base64, f.observacao, f.capturado_em, f.produto_codigo, f.pedido_id, u.nome as conferente
        FROM fotos f
        LEFT JOIN usuarios u ON f.usuario_id = u.id
        WHERE f.carga_id = $1
@@ -568,7 +606,11 @@ app.get('/admin/cargas/:id', async (req, res) => {
 
     res.json({
       produtos: produtos.rows,
-      fotos: fotos.rows
+      // O campo continua se chamando imagem_base64 para não mudar o painel,
+      // mas depois da migração ele traz a URL do arquivo.
+      fotos: fotos.rows.map(({ arquivo, ...f }) => ({
+        ...f, imagem_base64: fotosArquivo.urlFoto(req, arquivo, f.imagem_base64),
+      }))
     });
   } catch (err) {
     console.error('Erro ao buscar detalhes da carga:', err);
@@ -1634,7 +1676,7 @@ app.post('/entrada/itens/:itemId/observacao', async (req, res) => {
 app.get('/entrada/itens/:itemId/fotos', async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT f.id, f.imagem_base64, f.observacao, f.capturado_em, u.nome AS usuario
+      `SELECT f.id, f.arquivo, f.imagem_base64, f.observacao, f.capturado_em, u.nome AS usuario
          FROM conferencias_entrada_fotos f
          LEFT JOIN usuarios u ON u.id = f.usuario_id
         WHERE f.item_id = $1
@@ -1642,8 +1684,8 @@ app.get('/entrada/itens/:itemId/fotos', async (req, res) => {
       [req.params.itemId]
     );
     res.json(r.rows.map(f => ({
-      id: f.id, imageData: f.imagem_base64, observation: f.observacao,
-      capturedAt: f.capturado_em, usuario: f.usuario,
+      id: f.id, imageData: fotosArquivo.urlFoto(req, f.arquivo, f.imagem_base64),
+      observation: f.observacao, capturedAt: f.capturado_em, usuario: f.usuario,
     })));
   } catch (err) {
     console.error('Erro ao buscar fotos de entrada:', err);
@@ -1657,21 +1699,28 @@ app.post('/entrada/itens/:itemId/fotos', async (req, res) => {
   const uid = usuario_id || 1;
 
   if (!id || !imageData) return res.status(400).json({ error: 'id e imageData são obrigatórios' });
+  if (!fotosArquivo.decodificar(imageData)) return res.status(400).json({ error: 'imageData não é uma imagem' });
 
+  let novas = new Map();
   try {
+    // Vazio quando a foto já existe (reenvio): segue sem gravar de novo.
+    novas = await fotosArquivo.prepararFotosNovas(pool, 'conferencias_entrada_fotos', [{ id, imageData }]);
+    const arquivo = novas.get(String(id));
+
     const r = await comTransacao(async (client) => {
       const item = await client.query(
         `SELECT id, conferencia_id, codprod FROM conferencias_entrada_itens WHERE id = $1`,
         [itemId]
       );
       if (item.rowCount === 0) return { erro: 404, msg: 'Item não encontrado' };
+      if (!arquivo) return { sucesso: true };
 
       const gravou = await client.query(
         `INSERT INTO conferencias_entrada_fotos
-           (id, conferencia_id, item_id, usuario_id, imagem_base64, observacao)
+           (id, conferencia_id, item_id, usuario_id, arquivo, observacao)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (id) DO NOTHING RETURNING id`,
-        [id, item.rows[0].conferencia_id, itemId, uid, imageData, observation || null]
+        [id, item.rows[0].conferencia_id, itemId, uid, arquivo, observation || null]
       );
 
       if (gravou.rowCount > 0) {
@@ -1682,12 +1731,17 @@ app.post('/entrada/itens/:itemId/fotos', async (req, res) => {
            JSON.stringify({ foto_id: id, codprod: item.rows[0].codprod, observacao: observation || null })]
         );
       }
+      if (gravou.rowCount === 0) await fotosArquivo.apagarArquivos([arquivo]);
       return { sucesso: true };
     });
 
-    if (r.erro) return res.status(r.erro).json({ error: r.msg });
+    if (r.erro) {
+      await fotosArquivo.apagarArquivos([...novas.values()]);
+      return res.status(r.erro).json({ error: r.msg });
+    }
     res.json(r);
   } catch (err) {
+    await fotosArquivo.apagarArquivos([...novas.values()]);
     console.error('Erro ao salvar foto de entrada:', err);
     res.status(500).json({ error: 'Erro ao salvar foto' });
   }
@@ -1882,7 +1936,7 @@ app.get('/admin/entradas/:id', async (req, res) => {
     );
 
     const fotos = await pool.query(
-      `SELECT f.id, f.item_id, f.imagem_base64, f.observacao, f.capturado_em, u.nome AS usuario
+      `SELECT f.id, f.item_id, f.arquivo, f.imagem_base64, f.observacao, f.capturado_em, u.nome AS usuario
          FROM conferencias_entrada_fotos f
          LEFT JOIN usuarios u ON u.id = f.usuario_id
         WHERE f.conferencia_id = $1
@@ -1903,7 +1957,7 @@ app.get('/admin/entradas/:id', async (req, res) => {
       itens: itens.rows.map(i => ({ ...i, total_fotos: Number(i.total_fotos) })),
       leituras:  leituras.rows,
       fotos:     fotos.rows.map(f => ({
-        id: f.id, itemId: f.item_id, imageData: f.imagem_base64,
+        id: f.id, itemId: f.item_id, imageData: fotosArquivo.urlFoto(req, f.arquivo, f.imagem_base64),
         observation: f.observacao, capturedAt: f.capturado_em, usuario: f.usuario,
       })),
       historico: historico.rows,

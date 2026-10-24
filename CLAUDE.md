@@ -54,7 +54,7 @@ PostgreSQL  ◀──── pg pool ──────────────�
 ```
 
 - **ERP** (`192.168.255.6:5000`): read-only source of truth for cargo/product data and stock counts. The backend proxies some ERP calls.
-- **Local backend** (`192.168.255.6:3000`): stores progress, photos (as base64 TEXT), bags, and history.
+- **Local backend** (`192.168.255.6:3000`): stores progress, bags, and history. Photo files live on disk (see *Photo storage*), not in Postgres.
 - **`/api-local` proxy**: Vite dev server proxies `/api-local/*` → `http://192.168.255.6:3000/*` to avoid CORS in dev. Little used — most code calls the backend through `API_URL` instead.
 - **`src/lib/api.ts`**: single source for both hosts. `API_URL` and `ERP_URL` default to the production IPs and are overridden by `VITE_API_URL` / `VITE_ERP_URL` in a gitignored `.env.local`. Never hardcode the IP in a component — that is what this module replaced.
 
@@ -79,6 +79,18 @@ Photos share a single `fotos` DB table and `PhotoRecord` TS type, differentiated
 | Bag | n/a | n/a | Separate `sacolas_fotos` table |
 
 Filters for finalization photos must always be `!p.produtoCodigo && !p.pedidoId`.
+
+### Photo storage
+
+Photos are **files on disk**, not database rows. `server/fotos.js` owns this:
+
+- Every incoming photo (data URL from the app) is recompressed by `sharp` to WebP, max 1280px on the longest side, and written to `FOTOS_DIR/<cargas|sacolas|entradas>/<yyyy>/<mm>/<uuid>.webp`. The DB stores only that relative path in the `arquivo` column of `fotos`, `sacolas_fotos` and `conferencias_entrada_fotos`.
+- Express serves `FOTOS_DIR` at `/arquivos-fotos`. API responses put an **absolute URL** in the same field the app always read (`imageData`, or `imagem_base64` in `/admin/cargas/:id`), so `<img src>` works unchanged. Set `FOTOS_URL_BASE` if a proxy changes the host.
+- Rows from before the migration may still have `imagem_base64` and no `arquivo`; `urlFoto()` falls back to the base64. Never write `imagem_base64` again.
+- Bag sync re-sends every photo each time; `prepararFotosNovas()` skips ids already in the DB so nothing is recompressed twice. File writes happen **before** the transaction, and the route deletes them if it fails.
+- Client side, all capture goes through `comprimirFoto()` in `src/lib/fotos.ts`; display/download of a value that may be a URL or legacy base64 goes through `fotoSrc()` / `baixarFoto()`.
+- In Docker, `FOTOS_DIR=/app/fotos` is the named volume `fotos`. Back it up together with `pgdata`: the DB without the files has no images.
+- Migrating old base64 rows: `server/scripts/migrar-fotos.js` (`amostra` → `migrar` → `limpar`, then `VACUUM FULL`). See `server/migrations/003_fotos_em_arquivo.md`.
 
 ### Database schema key points
 

@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import imageCompression from 'browser-image-compression';
 import {
   ArrowLeft,
   Save,
@@ -26,6 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { comprimirFoto } from '@/lib/fotos';
 
 interface PhotoCaptureProps {
   cargoId: string;
@@ -68,28 +68,9 @@ export function PhotoCapture({
     setIsCapturing(true);
 
     try {
-      // Compress the image
-      const options = {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 1200,
-        useWebWorker: true,
-      };
-      
-      const compressedFile = await imageCompression(file, options);
-      
-      // Convert to base64
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        onAddPhoto(base64);
-        toast.success(`Foto ${photos.length + 1} capturada!`);
-        setIsCapturing(false);
-      };
-      reader.onerror = () => {
-        toast.error('Erro ao processar imagem');
-        setIsCapturing(false);
-      };
-      reader.readAsDataURL(compressedFile);
+      onAddPhoto(await comprimirFoto(file));
+      toast.success(`Foto ${photos.length + 1} capturada!`);
+      setIsCapturing(false);
     } catch (error) {
       console.error('Compression error:', error);
       toast.error('Erro ao comprimir imagem');

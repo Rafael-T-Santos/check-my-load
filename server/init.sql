@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS fotos (
     id VARCHAR(100) PRIMARY KEY,
     carga_id VARCHAR(50) REFERENCES conferencias_cargas(id),
     usuario_id INTEGER REFERENCES usuarios(id),
-    imagem_base64 TEXT NOT NULL,
+    arquivo TEXT,                 -- caminho em FOTOS_DIR (server/fotos.js)
+    imagem_base64 TEXT,           -- legado: fotos anteriores à migração 003
     observacao TEXT,
     capturado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -80,7 +81,8 @@ CREATE TABLE IF NOT EXISTS sacolas_produtos (
 CREATE TABLE IF NOT EXISTS sacolas_fotos (
     id VARCHAR(100) PRIMARY KEY,
     sacola_id VARCHAR(50) REFERENCES sacolas(id) ON DELETE CASCADE,
-    imagem_base64 TEXT NOT NULL,
+    arquivo TEXT,                 -- caminho em FOTOS_DIR (server/fotos.js)
+    imagem_base64 TEXT,           -- legado: fotos anteriores à migração 003
     observacao TEXT,
     capturado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -263,7 +265,8 @@ CREATE TABLE IF NOT EXISTS conferencias_entrada_fotos (
     conferencia_id  INTEGER NOT NULL REFERENCES conferencias_entrada(id) ON DELETE CASCADE,
     item_id         INTEGER REFERENCES conferencias_entrada_itens(id) ON DELETE CASCADE,
     usuario_id      INTEGER REFERENCES usuarios(id),
-    imagem_base64   TEXT NOT NULL,
+    arquivo         TEXT,         -- caminho em FOTOS_DIR (server/fotos.js)
+    imagem_base64   TEXT,         -- legado: fotos anteriores à migração 003
     observacao      TEXT,
     capturado_em    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

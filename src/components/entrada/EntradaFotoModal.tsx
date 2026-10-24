@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, ImageIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { comprimirFoto } from '@/lib/fotos';
 import type { ItemEntrada } from '@/types/entrada';
 
 export interface FotoEntrada {
@@ -18,22 +19,6 @@ interface EntradaFotoModalProps {
   onClose: () => void;
   onAddPhoto: (itemId: number, imageData: string, observation: string) => Promise<void>;
   onLoadPhotos: (itemId: number) => Promise<FotoEntrada[]>;
-}
-
-/** Mesmo tratamento das fotos de carga: reduz antes de virar base64. */
-function compressImage(dataUrl: string, maxWidth = 1280, quality = 0.75): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.width);
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.src = dataUrl;
-  });
 }
 
 /**
@@ -70,14 +55,14 @@ export function EntradaFotoModal({
 
   if (!item) return null;
 
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      setCapturada(await compressImage(reader.result as string));
-    };
-    reader.readAsDataURL(file);
+    try {
+      setCapturada(await comprimirFoto(file));
+    } catch (err) {
+      console.error('Erro ao comprimir foto:', err);
+    }
   };
 
   const handleSave = async () => {

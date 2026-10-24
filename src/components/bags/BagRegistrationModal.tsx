@@ -8,9 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { PhotoRecord, BagProduct } from '@/types/cargo';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 import { BagLabel, type ClienteData } from './BagLabel';
-import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
 import { API_URL } from '@/lib/api';
+import { comprimirFoto } from '@/lib/fotos';
 
 interface BagRegistrationModalProps {
   isOpen: boolean;
@@ -183,24 +183,14 @@ export function BagRegistrationModal({
 
     setIsCapturing(true);
     try {
-      const options = {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 1024,
-        useWebWorker: true,
+      const newPhoto: PhotoRecord = {
+        id: `bag-photo-${Date.now()}`,
+        imageData: await comprimirFoto(file),
+        observation: '',
+        capturedAt: new Date().toISOString(),
       };
-      const compressedFile = await imageCompression(file, options);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const newPhoto: PhotoRecord = {
-          id: `bag-photo-${Date.now()}`,
-          imageData: reader.result as string,
-          observation: '',
-          capturedAt: new Date().toISOString(),
-        };
-        setPhotos(prev => [...prev, newPhoto]);
-        toast.success(`Foto ${photos.length + 1} capturada!`);
-      };
-      reader.readAsDataURL(compressedFile);
+      setPhotos(prev => [...prev, newPhoto]);
+      toast.success(`Foto ${photos.length + 1} capturada!`);
     } catch (error) {
       toast.error('Erro ao capturar foto');
     } finally {
