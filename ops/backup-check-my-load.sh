@@ -24,7 +24,8 @@ DESTINO="${DESTINO:-$HOME/backups/check-my-load}"
 DIAS="${DIAS:-30}"
 CONTAINER="${CONTAINER:-check-my-load-db-1}"
 VOLUME_FOTOS="${VOLUME_FOTOS:-check-my-load_fotos}"
-# Imagem que já existe no servidor (base do backend): não depende de internet.
+# Imagem só para copiar arquivos. Foi baixada no primeiro teste (02/11/2026)
+# e fica no cache do Docker; se for removida, a próxima execução baixa de novo.
 IMAGEM="${IMAGEM:-node:18-alpine}"
 mkdir -p "$DESTINO/fotos"
 
@@ -58,13 +59,25 @@ find "$DESTINO" -maxdepth 1 -name 'check-my-load-*.sql.gz' -mtime +"$DIAS" -dele
 
 # ── Fotos
 # O volume pertence ao root e o cron roda como nitia: um container lê o volume
-# e grava na pasta do nitia com o uid dele. -n não sobrescreve o que já foi
-# copiado, então só as fotos novas são transferidas. Os .tmp são uploads em
-# andamento na hora do backup; a versão final entra na noite seguinte.
+# e grava na pasta do nitia com o uid dele. Copia só os .webp que ainda não
+# estão na cópia (uploads em andamento são .tmp e ficam para a noite seguinte).
+# Não usar `cp -R -n` aqui: no busybox do alpine, se a pasta de destino já
+# existe ele pula a árvore inteira e sai com 0, sem copiar nada (02/11/2026).
+# Cada foto vai para .parcial e só depois é renomeada, para que uma cópia
+# interrompida não pareça completa na noite seguinte.
 docker run --rm -u "$(id -u):$(id -g)" \
   -v "$VOLUME_FOTOS":/origem:ro \
   -v "$DESTINO/fotos":/destino \
-  "$IMAGEM" sh -c 'cp -R -p -n /origem/. /destino/ && find /destino -name "*.tmp" -delete && rm -rf /destino/_amostra'
+  "$IMAGEM" sh -c '
+    set -e
+    cd /origem
+    find . -type f -name "*.webp" ! -path "./_amostra/*" | while IFS= read -r f; do
+      [ -e "/destino/$f" ] && continue
+      mkdir -p "/destino/${f%/*}"
+      cp "$f" "/destino/$f.parcial"
+      mv "/destino/$f.parcial" "/destino/$f"
+    done
+    find /destino -name "*.parcial" -delete'
 
 # Confere: toda foto do volume tem que estar na cópia.
 NO_VOLUME=$(docker run --rm -v "$VOLUME_FOTOS":/origem:ro "$IMAGEM" sh -c 'find /origem -name "*.webp" ! -path "*/_amostra/*" | wc -l')
